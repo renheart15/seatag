@@ -16,7 +16,7 @@ mongoose.connect(MONGODB_URI)
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // MongoDB Schema
-const locationSchema = new mongoose.Schema({
+const alertSchema = new mongoose.Schema({
   status: String,
   latitude: Number,
   longitude: Number,
@@ -29,7 +29,7 @@ const locationSchema = new mongoose.Schema({
   rawPayload: String,
 });
 
-const Location = mongoose.model('Location', locationSchema);
+const Alert = mongoose.model('Alert', alertSchema);
 
 // Latest status (shared across all requests)
 let latestStatus = {
@@ -66,7 +66,7 @@ app.get('/api/status', (req, res) => {
 
 app.get('/api/alerts', async (req, res) => {
   try {
-    const locations = await Location.find().sort({ timestamp: -1 });
+    const locations = await Alert.find().sort({ timestamp: -1 });
     res.json({ locations, count: locations.length });
   } catch (err) {
     console.error('Error fetching alerts:', err);
@@ -120,15 +120,15 @@ app.post('/api/alerts', async (req, res) => {
 
   try {
     if (status === 'EMERGENCY' || status === 'NORMAL') {
-      const location = new Location(alertData);
-      await location.save();
-      console.log('💾 Location saved to MongoDB');
+      const alert = new Alert(alertData);
+      await alert.save();
+      console.log('💾 Alert saved to MongoDB');
     }
 
     broadcast(latestStatus);
     res.json({ success: true, message: 'Alert processed' });
   } catch (err) {
-    console.error('Error saving location:', err);
+    console.error('Error saving alert:', err);
     res.status(500).json({ success: false, message: 'Error saving alert' });
   }
 });
@@ -136,7 +136,7 @@ app.post('/api/alerts', async (req, res) => {
 app.delete('/api/alerts/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await Location.findByIdAndDelete(id);
+    const result = await Alert.findByIdAndDelete(id);
     res.json({
       success: !!result,
       message: result ? 'Deleted' : 'Not found',
@@ -149,7 +149,7 @@ app.delete('/api/alerts/:id', async (req, res) => {
 
 app.delete('/api/alerts', async (req, res) => {
   try {
-    await Location.deleteMany({});
+    await Alert.deleteMany({});
     res.json({ success: true, message: 'All cleared' });
   } catch (err) {
     console.error('Error clearing alerts:', err);
