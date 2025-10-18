@@ -264,19 +264,6 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'EMERGENCY':
-        return 'text-red-600';
-      case 'NORMAL':
-        return 'text-green-600';
-      case 'STATUS':
-        return 'text-blue-600';
-      default:
-        return 'text-gray-600';
-    }
-  };
-
   const openMapModal = (log: LocationLog) => {
     setSelectedLocation(log);
   };
