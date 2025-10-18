@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(npm run dev:*)",
+      "Read(//c/Users/ralfa/Downloads/Jamel/TRANSMITTER/**)",
+      "Read(//c/Users/ralfa/Downloads/Jamel/RECEIVER/**)",
+      "Bash(npm uninstall:*)",
+      "Read(//c/Users/ralfa/Pictures/Screenshots/**)",
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(tasklist:*)",
+      "Bash(copy server.js +,,)",
+      "mcp__ide__getDiagnostics"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

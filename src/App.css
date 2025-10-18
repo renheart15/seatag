@@ -1,0 +1,25 @@
+body {
+  background: #0e0e0e;
+  color: white;
+  text-align: center;
+  font-family: "Segoe UI", sans-serif;
+}
+
+.app {
+  padding-top: 120px;
+}
+
+.emergency h2 {
+  color: #ff4b4b;
+  animation: blink 1s infinite;
+}
+
+.normal h2 {
+  color: #00ff99;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.4;
+  }
+}
