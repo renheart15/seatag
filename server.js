@@ -75,8 +75,13 @@ app.get('/api/alerts', async (req, res) => {
 });
 
 app.post('/api/alerts', async (req, res) => {
+  // Log raw request for debugging
+  console.log('📥 Raw body:', JSON.stringify(req.body));
+  console.log('📥 Headers:', JSON.stringify(req.headers));
+
   const { status, payload } = req.body;
   if (!status || !payload) {
+    console.error('❌ Missing status or payload:', { status, payload, body: req.body });
     return res.status(400).json({ success: false, message: 'Invalid payload' });
   }
 
@@ -84,6 +89,7 @@ app.post('/api/alerts', async (req, res) => {
 
   const parts = payload.split('|');
   if (parts.length < 3) {
+    console.error('❌ Invalid format - not enough parts:', { payload, parts });
     return res.status(400).json({ success: false, message: 'Invalid format' });
   }
 
