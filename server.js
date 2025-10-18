@@ -2,14 +2,34 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
+import mongoose from 'mongoose';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// In-memory storage
-let locations = [];
-let locationIdCounter = 1;
+// MongoDB Connection
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://seatag:seatag123@cluster0.zuw4ldg.mongodb.net/seatag?retryWrites=true&w=majority&appName=Cluster0';
+
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('✅ Connected to MongoDB'))
+  .catch(err => console.error('❌ MongoDB connection error:', err));
+
+// MongoDB Schema
+const locationSchema = new mongoose.Schema({
+  status: String,
+  latitude: Number,
+  longitude: Number,
+  speed: String,
+  satellites: String,
+  uptime: String,
+  rssi: String,
+  snr: String,
+  timestamp: { type: Date, default: Date.now },
+  rawPayload: String,
+});
+
+const Location = mongoose.model('Location', locationSchema);
 
 // Latest status (shared across all requests)
 let latestStatus = {
@@ -44,14 +64,17 @@ app.get('/api/status', (req, res) => {
   res.json(latestStatus);
 });
 
-app.get('/api/alerts', (req, res) => {
-  const sorted = [...locations].sort(
-    (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-  );
-  res.json({ locations: sorted, count: sorted.length });
+app.get('/api/alerts', async (req, res) => {
+  try {
+    const locations = await Location.find().sort({ timestamp: -1 });
+    res.json({ locations, count: locations.length });
+  } catch (err) {
+    console.error('Error fetching alerts:', err);
+    res.status(500).json({ success: false, message: 'Error fetching alerts' });
+  }
 });
 
-app.post('/api/alerts', (req, res) => {
+app.post('/api/alerts', async (req, res) => {
   const { status, payload } = req.body;
   if (!status || !payload) {
     return res.status(400).json({ success: false, message: 'Invalid payload' });
@@ -76,7 +99,6 @@ app.post('/api/alerts', (req, res) => {
   }
 
   const alertData = {
-    _id: (locationIdCounter++).toString(),
     status,
     latitude: parseFloat(parts[1]),
     longitude: parseFloat(parts[2]),
@@ -85,7 +107,7 @@ app.post('/api/alerts', (req, res) => {
     uptime,
     rssi,
     snr,
-    timestamp: new Date().toISOString(),
+    timestamp: new Date(),
     rawPayload: payload,
   };
 
@@ -96,29 +118,43 @@ app.post('/api/alerts', (req, res) => {
     ...alertData,
   };
 
-  if (status === 'EMERGENCY' || status === 'NORMAL') {
-    locations.push(alertData);
-    console.log('💾 Location saved');
+  try {
+    if (status === 'EMERGENCY' || status === 'NORMAL') {
+      const location = new Location(alertData);
+      await location.save();
+      console.log('💾 Location saved to MongoDB');
+    }
+
+    broadcast(latestStatus);
+    res.json({ success: true, message: 'Alert processed' });
+  } catch (err) {
+    console.error('Error saving location:', err);
+    res.status(500).json({ success: false, message: 'Error saving alert' });
   }
-
-  broadcast(latestStatus);
-  res.json({ success: true, message: 'Alert processed' });
 });
 
-app.delete('/api/alerts/:id', (req, res) => {
+app.delete('/api/alerts/:id', async (req, res) => {
   const { id } = req.params;
-  const before = locations.length;
-  locations = locations.filter((l) => l._id !== id);
-  res.json({
-    success: locations.length < before,
-    message: locations.length < before ? 'Deleted' : 'Not found',
-  });
+  try {
+    const result = await Location.findByIdAndDelete(id);
+    res.json({
+      success: !!result,
+      message: result ? 'Deleted' : 'Not found',
+    });
+  } catch (err) {
+    console.error('Error deleting alert:', err);
+    res.status(500).json({ success: false, message: 'Error deleting alert' });
+  }
 });
 
-app.delete('/api/alerts', (req, res) => {
-  locations = [];
-  locationIdCounter = 1;
-  res.json({ success: true, message: 'All cleared' });
+app.delete('/api/alerts', async (req, res) => {
+  try {
+    await Location.deleteMany({});
+    res.json({ success: true, message: 'All cleared' });
+  } catch (err) {
+    console.error('Error clearing alerts:', err);
+    res.status(500).json({ success: false, message: 'Error clearing alerts' });
+  }
 });
 
 // Health check endpoint
