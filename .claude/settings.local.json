@@ -22,7 +22,12 @@
       "Bash(vercel whoami)",
       "Bash(vercel --prod)",
       "WebFetch(domain:seatag.onrender.com)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(git add server.js)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nChange MongoDB collection from locations to alerts\n\n- Rename Location model to Alert model\n- Update all references to use Alert collection\n- This matches the existing alerts collection in MongoDB\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd debug logging to diagnose ESP8266 400 errors\n\n- Log raw request body and headers for debugging\n- Add error messages for invalid payload scenarios\n- This will help identify why ESP8266 gets 400 while curl works\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix intermittent 400 errors by handling STATUS messages\n\n- STATUS messages don''t have full GPS data, only update live status\n- EMERGENCY and NORMAL messages still require full data for DB storage\n- This fixes the intermittent 400 errors when transmitter sends STATUS\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []

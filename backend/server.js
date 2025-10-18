@@ -52,11 +52,27 @@ wss.on('connection', (ws) => {
 app.post('/api/alerts', (req, res) => {
   const { status, payload } = req.body;
 
+  if (!status || !payload) {
+    return res.status(400).json({ success: false, message: 'Invalid payload' });
+  }
+
   console.log('📨 Received from ESP8266:', { status, payload });
 
   // Parse the payload: STATUS|lat|lng|speed|satellites|uptime,rssi,snr
   const parts = payload.split('|');
 
+  // STATUS messages might have less data, that's okay - just update live status
+  if (status === 'STATUS') {
+    latestStatus = {
+      status,
+      payload,
+      timestamp: Date.now(),
+    };
+    broadcast(latestStatus);
+    return res.json({ success: true, message: 'Status updated' });
+  }
+
+  // EMERGENCY and NORMAL messages need full GPS data
   if (parts.length >= 3) {
     // Parse uptime, rssi, snr from the last part
     let uptime = parts[5] || '0';
