@@ -18,7 +18,10 @@ dotenv.config();
 const MONGODB_URI = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/lora-tracker';
 
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✅ MongoDB Atlas connected'))
+  .then(() => {
+    console.log('✅ MongoDB Atlas connected');
+    loadLatestStatus(); // Load latest alert on startup
+  })
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Location Schema
@@ -43,6 +46,30 @@ let latestStatus = {
   payload: 'Waiting for data...',
   timestamp: Date.now()
 };
+
+// Load latest alert from database on startup
+async function loadLatestStatus() {
+  try {
+    const latestAlert = await Location.findOne().sort({ timestamp: -1 });
+    if (latestAlert) {
+      latestStatus = {
+        status: latestAlert.status,
+        payload: latestAlert.rawPayload,
+        timestamp: latestAlert.timestamp.getTime(),
+        latitude: latestAlert.latitude,
+        longitude: latestAlert.longitude,
+        speed: latestAlert.speed,
+        satellites: latestAlert.satellites,
+        uptime: latestAlert.uptime,
+        rssi: latestAlert.rssi,
+        snr: latestAlert.snr,
+      };
+      console.log('📍 Loaded latest status from database:', latestStatus);
+    }
+  } catch (err) {
+    console.error('❌ Error loading latest status:', err);
+  }
+}
 
 // HTTP server
 const server = createServer(app);
