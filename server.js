@@ -12,7 +12,10 @@ app.use(express.json());
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://seatag:seatag123@cluster0.zuw4ldg.mongodb.net/seatag?retryWrites=true&w=majority&appName=Cluster0';
 
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✅ Connected to MongoDB'))
+  .then(() => {
+    console.log('✅ Connected to MongoDB');
+    loadLatestStatus(); // Load latest alert on startup
+  })
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // MongoDB Schema
@@ -37,6 +40,30 @@ let latestStatus = {
   payload: 'Waiting for data...',
   timestamp: Date.now(),
 };
+
+// Load latest alert from database on startup
+async function loadLatestStatus() {
+  try {
+    const latestAlert = await Alert.findOne().sort({ timestamp: -1 });
+    if (latestAlert) {
+      latestStatus = {
+        status: latestAlert.status,
+        payload: latestAlert.rawPayload,
+        timestamp: latestAlert.timestamp.getTime(),
+        latitude: latestAlert.latitude,
+        longitude: latestAlert.longitude,
+        speed: latestAlert.speed,
+        satellites: latestAlert.satellites,
+        uptime: latestAlert.uptime,
+        rssi: latestAlert.rssi,
+        snr: latestAlert.snr,
+      };
+      console.log('📍 Loaded latest status from database:', latestStatus);
+    }
+  } catch (err) {
+    console.error('❌ Error loading latest status:', err);
+  }
+}
 
 // Create HTTP server
 const server = createServer(app);
