@@ -45,7 +45,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
     setError(null);
 
     try {
-      const response = await fetch('http://192.168.254.101:5000/api/alerts');
+      const response = await fetch('https://seatag.onrender.com/api/alerts');
       if (!response.ok) {
         throw new Error('Failed to fetch alerts');
       }
@@ -125,7 +125,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
 
     if (window.confirm('⚠️ DELETE ALL LOGS FROM DATABASE? This action cannot be undone!')) {
       try {
-        const response = await fetch('http://192.168.254.101:5000/api/alerts', {
+        const response = await fetch('https://seatag.onrender.com/api/alerts', {
           method: 'DELETE',
         });
 
@@ -145,7 +145,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
   const handleDeleteLog = async (id: string) => {
     if (window.confirm('Delete this log from database?')) {
       try {
-        const response = await fetch(`http://192.168.254.101:5000/api/alerts/${id}`, {
+        const response = await fetch(`https://seatag.onrender.com/api/alerts/${id}`, {
           method: 'DELETE',
         });
 

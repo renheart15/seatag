@@ -91,7 +91,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   // WebSocket connection for LoRa data
   useEffect(() => {
     const connectWebSocket = () => {
-      const ws = new WebSocket('ws://192.168.254.101:5000');
+      const ws = new WebSocket('wss://seatag.onrender.com');
 
       ws.onopen = () => {
         console.log('✅ WebSocket connected to LoRa receiver');

@@ -15,7 +15,14 @@
       "Bash(taskkill:*)",
       "Bash(tasklist:*)",
       "Bash(copy server.js +,,)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(vercel --version)",
+      "Bash(dir /B)",
+      "Bash(dir)",
+      "Bash(vercel whoami)",
+      "Bash(vercel --prod)",
+      "WebFetch(domain:seatag.onrender.com)",
+      "Bash(npm run build)"
     ],
     "deny": [],
     "ask": []
