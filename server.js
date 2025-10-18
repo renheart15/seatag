@@ -88,6 +88,19 @@ app.post('/api/alerts', async (req, res) => {
   console.log('📨 Received:', { status, payload });
 
   const parts = payload.split('|');
+
+  // STATUS messages might have less data, that's okay - just update live status
+  if (status === 'STATUS') {
+    latestStatus = {
+      status,
+      payload,
+      timestamp: Date.now(),
+    };
+    broadcast(latestStatus);
+    return res.json({ success: true, message: 'Status updated' });
+  }
+
+  // EMERGENCY and NORMAL messages need full GPS data
   if (parts.length < 3) {
     console.error('❌ Invalid format - not enough parts:', { payload, parts });
     return res.status(400).json({ success: false, message: 'Invalid format' });
