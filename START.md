@@ -40,7 +40,7 @@ If you don't want to install MongoDB, I can modify the backend to use in-memory 
 **"Failed to fetch locations" error:**
 - Make sure the backend server is running on port 5000
 - Check that MongoDB is running (if using MongoDB)
-- Verify the ESP8266 is sending data to http://192.168.254.101:5000/api/alerts
+- Verify the ESP8266 is sending data to https://seatag.vercel.app
 
 **WebSocket connection fails:**
 - Make sure both frontend and backend are running
