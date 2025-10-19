@@ -116,18 +116,7 @@ app.post('/api/alerts', async (req, res) => {
 
   const parts = payload.split('|');
 
-  // STATUS messages might have less data, that's okay - just update live status
-  if (status === 'STATUS') {
-    latestStatus = {
-      status,
-      payload,
-      timestamp: Date.now(),
-    };
-    broadcast(latestStatus);
-    return res.json({ success: true, message: 'Status updated' });
-  }
-
-  // EMERGENCY and NORMAL messages need full GPS data
+  // All messages (STATUS, EMERGENCY, NORMAL) need full GPS data to display on map
   if (parts.length < 3) {
     console.error('❌ Invalid format - not enough parts:', { payload, parts });
     return res.status(400).json({ success: false, message: 'Invalid format' });
@@ -165,12 +154,14 @@ app.post('/api/alerts', async (req, res) => {
   };
 
   try {
+    // Only save EMERGENCY and NORMAL to database, not STATUS
     if (status === 'EMERGENCY' || status === 'NORMAL') {
       const alert = new Alert(alertData);
       await alert.save();
       console.log('💾 Alert saved to MongoDB');
     }
 
+    // Broadcast all messages (including STATUS) to frontend
     broadcast(latestStatus);
     res.json({ success: true, message: 'Alert processed' });
   } catch (err) {
