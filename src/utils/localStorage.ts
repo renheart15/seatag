@@ -15,6 +15,8 @@ export const getLocationLogs = (): LocationLog[] => {
 export const saveLocationLog = (latitude: number, longitude: number): LocationLog => {
   const newLog: LocationLog = {
     id: crypto.randomUUID(),
+    deviceId: 'LOCAL_DEVICE',
+    deviceName: 'Local Device',
     latitude,
     longitude,
     timestamp: Date.now(),
