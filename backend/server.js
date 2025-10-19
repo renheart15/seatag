@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
+import mongoose from 'mongoose';
 
 const app = express();
 const PORT = 5000;
@@ -10,12 +11,74 @@ const PORT = 5000;
 app.use(cors());
 app.use(express.json());
 
-// In-memory storage (replaces MongoDB)
-let locations = [];
-let locationIdCounter = 1;
+// MongoDB Connection
+import dotenv from 'dotenv';
+dotenv.config();
+
+const MONGODB_URI = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/lora-tracker';
+
+mongoose.connect(MONGODB_URI)
+  .then(() => {
+    console.log('✅ MongoDB Atlas connected');
+    loadLatestStatus(); // Load latest alert on startup
+  })
+  .catch(err => console.error('❌ MongoDB connection error:', err));
+
+// Location Schema
+const locationSchema = new mongoose.Schema({
+  deviceId: { type: String, required: true, index: true },
+  deviceName: { type: String },
+  status: { type: String, required: true },
+  latitude: { type: Number, required: true },
+  longitude: { type: Number, required: true },
+  speed: String,
+  satellites: String,
+  uptime: String,
+  rssi: String,
+  snr: String,
+  rawPayload: String,
+  timestamp: { type: Date, default: Date.now }
+});
+
+// Compound index for efficient querying by device and time
+locationSchema.index({ deviceId: 1, timestamp: -1 });
+
+const Location = mongoose.model('Location', locationSchema, 'alerts');
 
 // Store latest status per device for WebSocket broadcast
 let latestStatusByDevice = new Map();
+
+// Load latest alert for each device from database on startup
+async function loadLatestStatus() {
+  try {
+    // Get distinct device IDs
+    const deviceIds = await Location.distinct('deviceId');
+
+    // Load latest alert for each device
+    for (const deviceId of deviceIds) {
+      const latestAlert = await Location.findOne({ deviceId }).sort({ timestamp: -1 });
+      if (latestAlert) {
+        latestStatusByDevice.set(deviceId, {
+          deviceId: latestAlert.deviceId,
+          deviceName: latestAlert.deviceName || deviceId,
+          status: latestAlert.status,
+          payload: latestAlert.rawPayload,
+          timestamp: latestAlert.timestamp.getTime(),
+          latitude: latestAlert.latitude,
+          longitude: latestAlert.longitude,
+          speed: latestAlert.speed,
+          satellites: latestAlert.satellites,
+          uptime: latestAlert.uptime,
+          rssi: latestAlert.rssi,
+          snr: latestAlert.snr,
+        });
+      }
+    }
+    console.log(`📍 Loaded latest status for ${deviceIds.length} device(s) from database`);
+  } catch (err) {
+    console.error('❌ Error loading latest status:', err);
+  }
+}
 
 // HTTP server
 const server = createServer(app);
@@ -47,7 +110,7 @@ wss.on('connection', (ws) => {
 });
 
 // API endpoint to receive alerts from ESP8266 receiver
-app.post('/api/alerts', (req, res) => {
+app.post('/api/alerts', async (req, res) => {
   try {
     const { status, payload } = req.body;
 
@@ -55,7 +118,7 @@ app.post('/api/alerts', (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid payload' });
     }
 
-    console.log('📨 Received:', { status, payload });
+    console.log('📨 Received from ESP8266:', { status, payload });
 
     // Parse the payload: DEVICE_ID|STATUS|lat|lng|speed|satellites|uptime,rssi,snr
     const parts = payload.split('|');
@@ -73,90 +136,108 @@ app.post('/api/alerts', (req, res) => {
     console.log('📱 Device ID:', deviceId);
     console.log('📝 Actual Status:', actualStatus);
 
-    // STATUS messages might have less data, that's okay - just update live status
-    if (actualStatus === 'STATUS' && parts.length >= 7) {
-      let uptime = '0';
-      let rssi = '';
-      let snr = '';
+  // STATUS messages might have less data, that's okay - just update live status
+  if (actualStatus === 'STATUS' && parts.length >= 7) {
+    // Parse uptime which may contain rssi and snr: "uptime,rssi,snr"
+    let uptime = '0';
+    let rssi = '';
+    let snr = '';
 
-      if (parts[6]) {
-        const uptimeParts = parts[6].split(',');
-        uptime = uptimeParts[0] || '0';
-        rssi = uptimeParts[1] || '';
-        snr = uptimeParts[2] || '';
-      }
-
-      const statusData = {
-        deviceId: deviceId,
-        deviceName: deviceId,
-        status: actualStatus,
-        latitude: parseFloat(parts[2]),
-        longitude: parseFloat(parts[3]),
-        speed: parts[4] || '0km/h',
-        satellites: parts[5] || '0sat',
-        uptime: uptime,
-        rssi: rssi,
-        snr: snr,
-        payload: payload,
-        timestamp: Date.now(),
-      };
-
-      latestStatusByDevice.set(deviceId, statusData);
-      broadcast(statusData);
-      return res.json({ success: true, message: 'Status updated' });
+    if (parts[6]) {
+      const uptimeParts = parts[6].split(',');
+      uptime = uptimeParts[0] || '0';
+      rssi = uptimeParts[1] || '';
+      snr = uptimeParts[2] || '';
     }
 
-    // EMERGENCY and NORMAL messages need full GPS data
-    if (parts.length >= 7) {
-      let uptime = '0';
-      let rssi = '';
-      let snr = '';
+    const statusData = {
+      deviceId: deviceId,
+      deviceName: deviceId,
+      status: actualStatus,
+      latitude: parseFloat(parts[2]),
+      longitude: parseFloat(parts[3]),
+      speed: parts[4] || '0km/h',
+      satellites: parts[5] || '0sat',
+      uptime: uptime,
+      rssi: rssi,
+      snr: snr,
+      payload: payload,
+      timestamp: Date.now(),
+    };
 
-      if (parts[6]) {
-        const uptimeParts = parts[6].split(',');
-        uptime = uptimeParts[0] || '0';
-        rssi = uptimeParts[1] || '';
-        snr = uptimeParts[2] || '';
-      }
+    latestStatusByDevice.set(deviceId, statusData);
+    broadcast(statusData);
+    return res.json({ success: true, message: 'Status updated' });
+  }
 
-      const alertData = {
-        _id: (locationIdCounter++).toString(),
-        deviceId: deviceId,
-        deviceName: deviceId,
-        status: actualStatus,
-        latitude: parseFloat(parts[2]),
-        longitude: parseFloat(parts[3]),
-        speed: parts[4] || '0km/h',
-        satellites: parts[5] || '0sat',
-        uptime: uptime,
-        rssi: rssi,
-        snr: snr,
-        timestamp: new Date().toISOString(),
-        rawPayload: payload
-      };
+  // EMERGENCY and NORMAL messages need full GPS data
+  if (parts.length >= 7) {
+    let uptime = '0';
+    let rssi = '';
+    let snr = '';
 
-      // Update latest status for this device
-      latestStatusByDevice.set(deviceId, {
-        ...alertData,
-        payload: payload,
+    if (parts[6]) {
+      const uptimeParts = parts[6].split(',');
+      uptime = uptimeParts[0] || '0';
+      rssi = uptimeParts[1] || '';
+      snr = uptimeParts[2] || '';
+    }
+
+    // ✅ Trim and parse safely
+    const lat = parseFloat((parts[2] || '').trim());
+    const lng = parseFloat((parts[3] || '').trim());
+
+    if (isNaN(lat) || isNaN(lng)) {
+      console.error('⚠️ Invalid coordinates received:', parts[2], parts[3]);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coordinates received',
+        received: { lat: parts[2], lng: parts[3] },
       });
-
-      // Save only EMERGENCY and NORMAL to in-memory storage (not STATUS)
-      if (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL') {
-        locations.push(alertData);
-        console.log('💾 Location saved:', alertData);
-        console.log(`📊 Total locations: ${locations.length}`);
-      } else {
-        console.log('📍 STATUS mode - displayed on frontend only');
-      }
-
-      // Broadcast to all WebSocket clients (all modes including STATUS)
-      broadcast(latestStatusByDevice.get(deviceId));
-
-      res.json({ success: true, message: 'Alert received' + (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL' ? ' and saved' : '') });
-    } else {
-      res.status(400).json({ success: false, message: 'Invalid payload format - insufficient data' });
     }
+
+    const alertData = {
+      deviceId: deviceId,
+      deviceName: deviceId,
+      status: actualStatus,
+      latitude: lat,
+      longitude: lng,
+      speed: parts[4] || '0km/h',
+      satellites: parts[5] || '0sat',
+      uptime: uptime,
+      rssi: rssi,
+      snr: snr,
+      timestamp: Date.now(),
+      rawPayload: payload,
+    };
+
+    latestStatusByDevice.set(deviceId, {
+      ...alertData,
+      payload: payload,
+    });
+
+    // Save only EMERGENCY and NORMAL to MongoDB (not STATUS)
+    if (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL') {
+      try {
+        const location = new Location(alertData);
+        await location.save();
+        console.log('💾 Location saved to database:', alertData);
+      } catch (error) {
+        console.error('❌ Error saving to database:', error.message);
+        return res.status(500).json({ success: false, message: 'Database save error', error: error.message });
+      }
+    } else {
+      console.log('📍 STATUS mode - displayed on frontend only (not saved to database)');
+    }
+
+    broadcast(latestStatusByDevice.get(deviceId));
+    return res.json({
+      success: true,
+      message: `Alert received${(actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL') ? ' and saved' : ''}`,
+    });
+  } else {
+    res.status(400).json({ success: false, message: 'Invalid payload format - insufficient data' });
+  }
   } catch (error) {
     console.error('❌ Error processing alert:', error);
     console.error('❌ Error stack:', error.stack);
@@ -164,54 +245,101 @@ app.post('/api/alerts', (req, res) => {
   }
 });
 
-// Get all alerts from memory
-app.get('/api/alerts', (req, res) => {
-  // Sort by timestamp descending (newest first)
-  const sortedLocations = [...locations].sort((a, b) =>
-    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
-
-  res.json({ locations: sortedLocations, count: sortedLocations.length });
+// Get all alerts from database
+app.get('/api/alerts', async (req, res) => {
+  try {
+    const locations = await Location.find().sort({ timestamp: -1 });
+    res.json({ locations, count: locations.length });
+  } catch (error) {
+    console.error('❌ Error fetching alerts:', error);
+    res.status(500).json({ success: false, message: 'Error fetching alerts' });
+  }
 });
 
-// Get latest status
+// Get latest status for all devices
 app.get('/api/status', (req, res) => {
-  res.json(latestStatus);
+  const allStatuses = Array.from(latestStatusByDevice.values());
+  res.json({ devices: allStatuses, count: allStatuses.length });
+});
+
+// Get latest status for specific device
+app.get('/api/status/:deviceId', (req, res) => {
+  const { deviceId } = req.params;
+  const status = latestStatusByDevice.get(deviceId);
+
+  if (status) {
+    res.json(status);
+  } else {
+    res.status(404).json({ success: false, message: 'Device not found' });
+  }
+});
+
+// Get all unique devices
+app.get('/api/devices', async (req, res) => {
+  try {
+    const deviceIds = await Location.distinct('deviceId');
+    const devices = deviceIds.map(id => ({
+      deviceId: id,
+      deviceName: id,
+      latestStatus: latestStatusByDevice.get(id) || null
+    }));
+    res.json({ devices, count: devices.length });
+  } catch (error) {
+    console.error('❌ Error fetching devices:', error);
+    res.status(500).json({ success: false, message: 'Error fetching devices' });
+  }
+});
+
+// Get alerts for specific device
+app.get('/api/alerts/device/:deviceId', async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const locations = await Location.find({ deviceId }).sort({ timestamp: -1 });
+    res.json({ locations, count: locations.length });
+  } catch (error) {
+    console.error('❌ Error fetching alerts for device:', error);
+    res.status(500).json({ success: false, message: 'Error fetching alerts' });
+  }
 });
 
 // Delete a specific alert by ID
-app.delete('/api/alerts/:id', (req, res) => {
-  const { id } = req.params;
-  const initialLength = locations.length;
+app.delete('/api/alerts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await Location.findByIdAndDelete(id);
 
-  locations = locations.filter(loc => loc._id !== id);
-
-  if (locations.length < initialLength) {
-    console.log(`🗑️ Alert ${id} deleted from memory`);
-    res.json({ success: true, message: 'Alert deleted' });
-  } else {
-    res.status(404).json({ success: false, message: 'Alert not found' });
+    if (result) {
+      console.log(`🗑️ Alert ${id} deleted from database`);
+      res.json({ success: true, message: 'Alert deleted' });
+    } else {
+      res.status(404).json({ success: false, message: 'Alert not found' });
+    }
+  } catch (error) {
+    console.error('❌ Error deleting alert:', error);
+    res.status(500).json({ success: false, message: 'Error deleting alert' });
   }
 });
 
 // Clear all alerts
-app.delete('/api/alerts', (req, res) => {
-  locations = [];
-  locationIdCounter = 1;
-  console.log('🗑️ All alerts cleared from memory');
-  res.json({ success: true, message: 'All alerts cleared' });
+app.delete('/api/alerts', async (req, res) => {
+  try {
+    await Location.deleteMany({});
+    console.log('🗑️ All alerts cleared from database');
+    res.json({ success: true, message: 'All alerts cleared' });
+  } catch (error) {
+    console.error('❌ Error clearing alerts:', error);
+    res.status(500).json({ success: false, message: 'Error clearing alerts' });
+  }
 });
 
 // Start server
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📡 WebSocket server ready`);
-  console.log(`💾 Using IN-MEMORY storage (no database required)`);
   console.log(`🌐 API endpoints:`);
   console.log(`   POST   http://localhost:${PORT}/api/alerts - Receive alerts from ESP8266`);
-  console.log(`   GET    http://localhost:${PORT}/api/alerts - Get all alerts`);
+  console.log(`   GET    http://localhost:${PORT}/api/alerts - Get all alerts from DB`);
   console.log(`   GET    http://localhost:${PORT}/api/status - Get latest status`);
   console.log(`   DELETE http://localhost:${PORT}/api/alerts/:id - Delete specific alert`);
   console.log(`   DELETE http://localhost:${PORT}/api/alerts - Clear all alerts`);
-  console.log(`\n⚠️  Note: Data will be lost when server restarts!`);
 });
