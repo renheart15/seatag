@@ -172,7 +172,6 @@ app.post('/api/alerts', async (req, res) => {
 
   // EMERGENCY and NORMAL messages need full GPS data
   if (parts.length >= 7) {
-    // Parse uptime which may contain rssi and snr: "uptime,rssi,snr"
     let uptime = '0';
     let rssi = '';
     let snr = '';
@@ -184,22 +183,34 @@ app.post('/api/alerts', async (req, res) => {
       snr = uptimeParts[2] || '';
     }
 
+    // ✅ Trim and parse safely
+    const lat = parseFloat((parts[2] || '').trim());
+    const lng = parseFloat((parts[3] || '').trim());
+
+    if (isNaN(lat) || isNaN(lng)) {
+      console.error('⚠️ Invalid coordinates received:', parts[2], parts[3]);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coordinates received',
+        received: { lat: parts[2], lng: parts[3] },
+      });
+    }
+
     const alertData = {
       deviceId: deviceId,
       deviceName: deviceId,
       status: actualStatus,
-      latitude: parseFloat(parts[2]),
-      longitude: parseFloat(parts[3]),
+      latitude: lat,
+      longitude: lng,
       speed: parts[4] || '0km/h',
       satellites: parts[5] || '0sat',
       uptime: uptime,
       rssi: rssi,
       snr: snr,
       timestamp: Date.now(),
-      rawPayload: payload
+      rawPayload: payload,
     };
 
-    // Update latest status for this device
     latestStatusByDevice.set(deviceId, {
       ...alertData,
       payload: payload,
@@ -212,16 +223,18 @@ app.post('/api/alerts', async (req, res) => {
         await location.save();
         console.log('💾 Location saved to database:', alertData);
       } catch (error) {
-        console.error('❌ Error saving to database:', error);
+        console.error('❌ Error saving to database:', error.message);
+        return res.status(500).json({ success: false, message: 'Database save error', error: error.message });
       }
     } else {
       console.log('📍 STATUS mode - displayed on frontend only (not saved to database)');
     }
 
-    // Broadcast to all WebSocket clients (all modes including STATUS)
     broadcast(latestStatusByDevice.get(deviceId));
-
-    res.json({ success: true, message: 'Alert received' + (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL' ? ' and saved' : '') });
+    return res.json({
+      success: true,
+      message: `Alert received${(actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL') ? ' and saved' : ''}`,
+    });
   } else {
     res.status(400).json({ success: false, message: 'Invalid payload format - insufficient data' });
   }
