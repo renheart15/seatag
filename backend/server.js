@@ -336,6 +336,7 @@ app.delete('/api/alerts', async (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📡 WebSocket server ready`);
+  console.log(`💾 MongoDB connected and ready`);
   console.log(`🌐 API endpoints:`);
   console.log(`   POST   http://localhost:${PORT}/api/alerts - Receive alerts from ESP8266`);
   console.log(`   GET    http://localhost:${PORT}/api/alerts - Get all alerts from DB`);

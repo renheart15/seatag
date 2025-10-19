@@ -122,12 +122,13 @@ app.post('/api/alerts', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid format' });
   }
 
-  let uptime = parts[5] || '0';
+  // Parse uptime,rssi,snr from parts[6]
+  let uptime = '0';
   let rssi = '';
   let snr = '';
 
-  if (parts[5] && parts[5].includes(',')) {
-    const uptimeParts = parts[5].split(',');
+  if (parts[6] && parts[6].includes(',')) {
+    const uptimeParts = parts[6].split(',');
     uptime = uptimeParts[0] || '0';
     rssi = uptimeParts[1] || '';
     snr = uptimeParts[2] || '';
