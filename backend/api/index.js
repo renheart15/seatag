@@ -77,12 +77,15 @@ app.post('/api/alerts', (req, res) => {
     console.log('📱 Device ID:', deviceId);
     console.log('📝 Actual Status:', actualStatus);
 
-    // Parse full GPS data
     if (parts.length >= 7) {
-      let uptime = '0';
-      let rssi = '';
-      let snr = '';
+      const lat = parseFloat(parts[2]);
+      const lng = parseFloat(parts[3]);
 
+      if (isNaN(lat) || isNaN(lng)) {
+        return res.status(400).json({ success: false, message: 'Invalid latitude or longitude' });
+      }
+
+      let uptime = '0', rssi = '', snr = '';
       if (parts[6]) {
         const uptimeParts = parts[6].split(',');
         uptime = uptimeParts[0] || '0';
@@ -95,8 +98,8 @@ app.post('/api/alerts', (req, res) => {
         deviceId: deviceId,
         deviceName: deviceId,
         status: actualStatus,
-        latitude: parseFloat(parts[2]),
-        longitude: parseFloat(parts[3]),
+        latitude: lat,
+        longitude: lng,
         speed: parts[4] || '0km/h',
         satellites: parts[5] || '0sat',
         uptime,
@@ -106,10 +109,9 @@ app.post('/api/alerts', (req, res) => {
         rawPayload: payload,
       };
 
-      // Update latest status for this device
       latestStatusByDevice.set(deviceId, {
         ...alertData,
-        payload: payload,
+        payload,
         timestamp: Date.now(),
       });
 
@@ -121,8 +123,9 @@ app.post('/api/alerts', (req, res) => {
       broadcast(latestStatusByDevice.get(deviceId));
       res.json({ success: true, message: 'Alert processed' });
     } else {
-      res.status(400).json({ success: false, message: 'Invalid payload format - insufficient data' });
+      return res.status(400).json({ success: false, message: 'Invalid payload format - insufficient data' });
     }
+
   } catch (error) {
     console.error('❌ Error processing alert:', error);
     console.error('❌ Stack:', error.stack);
