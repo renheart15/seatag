@@ -7,6 +7,8 @@ import 'leaflet/dist/leaflet.css';
 
 interface LocationLog {
   _id: string;
+  deviceId: string;
+  deviceName?: string;
   status: string;
   latitude?: number;
   longitude?: number;
@@ -28,6 +30,7 @@ type ViewMode = 'cards' | 'table';
 
 export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
   const [logs, setLogs] = useState<LocationLog[]>([]);
+  const [selectedDevice, setSelectedDevice] = useState<string>('');
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,16 +58,29 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
       // Parse payload for old records that don't have latitude/longitude parsed
       const processedLogs = (data.locations || []).map((log: LocationLog) => {
         // If latitude/longitude are missing but payload exists, parse it
-        if ((log.latitude === undefined || log.longitude === undefined) && log.payload) {
-          const parts = log.payload.split('|');
-          if (parts.length >= 3) {
+        if ((log.latitude === undefined || log.longitude === undefined) && (log.payload || log.rawPayload)) {
+          const payloadStr = log.payload || log.rawPayload || '';
+          const parts = payloadStr.split('|');
+
+          // New format: DEVICE_ID|STATUS|lat|lng|speed|satellites|uptime,rssi,snr
+          // Old format: STATUS|lat|lng|speed|satellites|uptime,rssi,snr
+          let deviceId = log.deviceId || '';
+          let startIdx = 1; // Where lat/lng data starts
+
+          // Check if first part is a device ID (new format)
+          if (parts.length >= 7 && !parts[0].match(/^(EMERGENCY|NORMAL|STATUS)$/)) {
+            deviceId = parts[0];
+            startIdx = 2; // Skip device ID and status
+          }
+
+          if (parts.length >= startIdx + 5) {
             // Parse uptime which may contain rssi and snr
-            let uptime = parts[5] || log.uptime || '';
+            let uptime = parts[startIdx + 4] || log.uptime || '';
             let rssi = log.rssi || '';
             let snr = log.snr || '';
 
-            if (parts[5] && parts[5].includes(',')) {
-              const uptimeParts = parts[5].split(',');
+            if (parts[startIdx + 4] && parts[startIdx + 4].includes(',')) {
+              const uptimeParts = parts[startIdx + 4].split(',');
               uptime = uptimeParts[0] || '';
               rssi = uptimeParts[1] || '';
               snr = uptimeParts[2] || '';
@@ -72,17 +88,23 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
 
             return {
               ...log,
-              latitude: parseFloat(parts[1]),
-              longitude: parseFloat(parts[2]),
-              speed: parts[3] || log.speed,
-              satellites: parts[4] || log.satellites,
+              deviceId: deviceId || log.deviceId || 'Unknown',
+              deviceName: log.deviceName || deviceId || 'Unknown Device',
+              latitude: parseFloat(parts[startIdx]),
+              longitude: parseFloat(parts[startIdx + 1]),
+              speed: parts[startIdx + 2] || log.speed,
+              satellites: parts[startIdx + 3] || log.satellites,
               uptime: uptime,
               rssi: rssi,
               snr: snr,
             };
           }
         }
-        return log;
+        return {
+          ...log,
+          deviceId: log.deviceId || 'Unknown',
+          deviceName: log.deviceName || log.deviceId || 'Unknown Device'
+        };
       });
 
       // Filter out locations without valid latitude/longitude
@@ -169,12 +191,17 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
     doc.setFontSize(18);
     doc.text('LoRa Location Tracker - Data Export', 14, 22);
 
-    // Add generation date
+    // Add generation date and filter info
     doc.setFontSize(11);
     doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 30);
+    if (selectedDevice) {
+      const deviceName = filteredLogs[0]?.deviceName || selectedDevice;
+      doc.text(`Device: ${deviceName}`, 14, 37);
+    }
 
     // Prepare table data
-    const tableData = logs.map(log => [
+    const tableData = filteredLogs.map(log => [
+      log.deviceName || log.deviceId,
       new Date(log.timestamp).toLocaleString(),
       log.status,
       log.latitude?.toFixed(6) || 'N/A',
@@ -187,20 +214,22 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
 
     // Add table
     autoTable(doc, {
-      head: [['Timestamp', 'Status', 'Latitude', 'Longitude', 'Speed', 'Satellites', 'RSSI', 'SNR']],
+      head: [['Device', 'Timestamp', 'Status', 'Latitude', 'Longitude', 'Speed', 'Sats', 'RSSI', 'SNR']],
       body: tableData,
-      startY: 35,
-      styles: { fontSize: 8 },
+      startY: selectedDevice ? 42 : 35,
+      styles: { fontSize: 7 },
       headStyles: { fillColor: [79, 70, 229] },
     });
 
     // Save PDF
-    doc.save(`lora-tracker-data-${Date.now()}.pdf`);
+    const deviceSuffix = selectedDevice ? `-${selectedDevice}` : '';
+    doc.save(`lora-tracker-data${deviceSuffix}-${Date.now()}.pdf`);
     showToast('PDF exported successfully!');
   };
 
   const exportToCSV = () => {
-    const csvData = logs.map(log => ({
+    const csvData = filteredLogs.map(log => ({
+      Device: log.deviceName || log.deviceId,
       Timestamp: new Date(log.timestamp).toLocaleString(),
       Status: log.status,
       Latitude: log.latitude?.toFixed(6) || 'N/A',
@@ -217,8 +246,9 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
 
+    const deviceSuffix = selectedDevice ? `-${selectedDevice}` : '';
     link.setAttribute('href', url);
-    link.setAttribute('download', `lora-tracker-data-${Date.now()}.csv`);
+    link.setAttribute('download', `lora-tracker-data${deviceSuffix}-${Date.now()}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -284,6 +314,14 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
     });
   };
 
+  // Filter logs by selected device
+  const filteredLogs = selectedDevice
+    ? logs.filter(log => log.deviceId === selectedDevice)
+    : logs;
+
+  // Get unique devices
+  const uniqueDevices = Array.from(new Set(logs.map(log => log.deviceId)));
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100 p-3 sm:p-6">
       <div className="max-w-7xl mx-auto">
@@ -320,22 +358,47 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
     </div>
   </div>
 
+  {/* Device Filter */}
+  {!loading && uniqueDevices.length > 1 && (
+    <div className="mb-3">
+      <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
+        Filter by Device ({uniqueDevices.length} devices)
+      </label>
+      <select
+        value={selectedDevice}
+        onChange={(e) => setSelectedDevice(e.target.value)}
+        className="w-full p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+      >
+        <option value="">All Devices ({logs.length} records)</option>
+        {uniqueDevices.map((deviceId) => {
+          const deviceLogs = logs.filter(l => l.deviceId === deviceId);
+          const deviceName = deviceLogs[0]?.deviceName || deviceId;
+          return (
+            <option key={deviceId} value={deviceId}>
+              {deviceName} ({deviceLogs.length} records)
+            </option>
+          );
+        })}
+      </select>
+    </div>
+  )}
+
   {/* Inline Statistics Bar (Full Width) */}
-  {!loading && logs.length > 0 ? (
+  {!loading && filteredLogs.length > 0 ? (
     <div className="flex justify-between gap-2 sm:gap-3">
       <div className="flex-1 bg-blue-50 p-1.5 sm:p-2 rounded-md text-center">
         <p className="text-[10px] sm:text-sm font-semibold text-blue-600">
-          Total = {logs.length}
+          Total = {filteredLogs.length}
         </p>
       </div>
       <div className="flex-1 bg-red-50 p-1.5 sm:p-2 rounded-md text-center">
         <p className="text-[10px] sm:text-sm font-semibold text-red-600">
-          Emergency = {logs.filter(l => l.status === 'EMERGENCY').length}
+          Emergency = {filteredLogs.filter(l => l.status === 'EMERGENCY').length}
         </p>
       </div>
       <div className="flex-1 bg-green-50 p-1.5 sm:p-2 rounded-md text-center">
         <p className="text-[10px] sm:text-sm font-semibold text-green-600">
-          Normal = {logs.filter(l => l.status === 'NORMAL').length}
+          Normal = {filteredLogs.filter(l => l.status === 'NORMAL').length}
         </p>
       </div>
     </div>
@@ -385,7 +448,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
           <div className="relative flex-shrink-0 z-50">
             <button
               onClick={() => setShowExportDropdown(!showExportDropdown)}
-              disabled={logs.length === 0 || loading}
+              disabled={filteredLogs.length === 0 || loading}
               className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white font-semibold py-3 px-5 rounded-lg shadow-md transition duration-300 flex items-center justify-center gap-2 text-sm sm:text-base"
             >
               <svg className="h-4 w-4 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -398,7 +461,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
             </button>
 
             {/* Dropdown Menu */}
-            {showExportDropdown && !loading && logs.length > 0 && (
+            {showExportDropdown && !loading && filteredLogs.length > 0 && (
               <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 z-[100] text-sm sm:text-base min-w-[280px]">
                 <button
                   onClick={() => {
@@ -437,7 +500,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
 
           <button
             onClick={handleClearLogs}
-            disabled={logs.length === 0 || loading}
+            disabled={filteredLogs.length === 0 || loading}
             className="flex-shrink-0 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-400 text-white font-semibold py-3 px-5 rounded-lg shadow-md transition duration-300 text-sm sm:text-base"
           >
             Clear
@@ -445,7 +508,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
 
           <button
             onClick={handleDeleteAll}
-            disabled={logs.length === 0 || loading}
+            disabled={filteredLogs.length === 0 || loading}
             className="flex-shrink-0 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold py-3 px-5 rounded-lg shadow-md transition duration-300 text-sm sm:text-base"
           >
             Delete All
@@ -505,6 +568,9 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
                 <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
                   <tr>
                     <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider">
+                      Device
+                    </th>
+                    <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider">
                       Time
                     </th>
                     <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider">
@@ -534,11 +600,16 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {logs.map((log, index) => (
+                  {filteredLogs.map((log, index) => (
                     <tr
                       key={log._id}
                       className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-indigo-50 transition-colors duration-150`}
                     >
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-gray-900">
+                        <span className="text-xs sm:text-sm font-medium text-indigo-600">
+                          {log.deviceName || log.deviceId}
+                        </span>
+                      </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-gray-900">
                         <div className="flex flex-col">
                           <span className="font-medium text-xs sm:text-sm">{formatTime(log.timestamp)}</span>
@@ -610,7 +681,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
           /* Card View */
           <div className="space-y-4 overflow-y-auto max-h-[70vh] sm:max-h-[75vh] px-1 sm:px-2"
                 style={{ WebkitOverflowScrolling: 'touch' }}>
-            {logs.map((log) => {
+            {filteredLogs.map((log) => {
               const isExpanded = expandedCards.has(log._id);
               return (
                 <div
@@ -624,6 +695,9 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 flex-1">
+                        <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">
+                          {log.deviceName || log.deviceId}
+                        </span>
                         <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getStatusBadge(log.status)}`}>
                           {log.status === 'EMERGENCY' ? '🚨 EMERGENCY' :
                            log.status === 'NORMAL' ? '✅ NORMAL' :

@@ -26,6 +26,8 @@ mongoose.connect(MONGODB_URI)
 
 // Location Schema
 const locationSchema = new mongoose.Schema({
+  deviceId: { type: String, required: true, index: true },
+  deviceName: { type: String },
   status: { type: String, required: true },
   latitude: { type: Number, required: true },
   longitude: { type: Number, required: true },
@@ -38,34 +40,41 @@ const locationSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now }
 });
 
+// Compound index for efficient querying by device and time
+locationSchema.index({ deviceId: 1, timestamp: -1 });
+
 const Location = mongoose.model('Location', locationSchema, 'alerts');
 
-// Store latest status for WebSocket broadcast
-let latestStatus = {
-  status: 'WAITING',
-  payload: 'Waiting for data...',
-  timestamp: Date.now()
-};
+// Store latest status per device for WebSocket broadcast
+let latestStatusByDevice = new Map();
 
-// Load latest alert from database on startup
+// Load latest alert for each device from database on startup
 async function loadLatestStatus() {
   try {
-    const latestAlert = await Location.findOne().sort({ timestamp: -1 });
-    if (latestAlert) {
-      latestStatus = {
-        status: latestAlert.status,
-        payload: latestAlert.rawPayload,
-        timestamp: latestAlert.timestamp.getTime(),
-        latitude: latestAlert.latitude,
-        longitude: latestAlert.longitude,
-        speed: latestAlert.speed,
-        satellites: latestAlert.satellites,
-        uptime: latestAlert.uptime,
-        rssi: latestAlert.rssi,
-        snr: latestAlert.snr,
-      };
-      console.log('📍 Loaded latest status from database:', latestStatus);
+    // Get distinct device IDs
+    const deviceIds = await Location.distinct('deviceId');
+
+    // Load latest alert for each device
+    for (const deviceId of deviceIds) {
+      const latestAlert = await Location.findOne({ deviceId }).sort({ timestamp: -1 });
+      if (latestAlert) {
+        latestStatusByDevice.set(deviceId, {
+          deviceId: latestAlert.deviceId,
+          deviceName: latestAlert.deviceName || deviceId,
+          status: latestAlert.status,
+          payload: latestAlert.rawPayload,
+          timestamp: latestAlert.timestamp.getTime(),
+          latitude: latestAlert.latitude,
+          longitude: latestAlert.longitude,
+          speed: latestAlert.speed,
+          satellites: latestAlert.satellites,
+          uptime: latestAlert.uptime,
+          rssi: latestAlert.rssi,
+          snr: latestAlert.snr,
+        });
+      }
     }
+    console.log(`📍 Loaded latest status for ${deviceIds.length} device(s) from database`);
   } catch (err) {
     console.error('❌ Error loading latest status:', err);
   }
@@ -90,8 +99,10 @@ function broadcast(data) {
 wss.on('connection', (ws) => {
   console.log('✅ WebSocket client connected');
 
-  // Send latest status immediately
-  ws.send(JSON.stringify(latestStatus));
+  // Send latest status for all devices immediately
+  latestStatusByDevice.forEach((status, deviceId) => {
+    ws.send(JSON.stringify(status));
+  });
 
   ws.on('close', () => {
     console.log('❌ WebSocket client disconnected');
@@ -108,40 +119,72 @@ app.post('/api/alerts', async (req, res) => {
 
   console.log('📨 Received from ESP8266:', { status, payload });
 
-  // Parse the payload: STATUS|lat|lng|speed|satellites|uptime,rssi,snr
+  // Parse the payload: DEVICE_ID|STATUS|lat|lng|speed|satellites|uptime,rssi,snr
   const parts = payload.split('|');
 
-  // STATUS messages might have less data, that's okay - just update live status
-  if (status === 'STATUS') {
-    latestStatus = {
-      status,
-      payload,
-      timestamp: Date.now(),
-    };
-    broadcast(latestStatus);
-    return res.json({ success: true, message: 'Status updated' });
+  if (parts.length < 2) {
+    return res.status(400).json({ success: false, message: 'Invalid payload format - missing device ID' });
   }
 
-  // EMERGENCY and NORMAL messages need full GPS data
-  if (parts.length >= 3) {
+  const deviceId = parts[0];
+  const actualStatus = parts[1];
+
+  // STATUS messages might have less data, that's okay - just update live status
+  if (actualStatus === 'STATUS' && parts.length >= 7) {
     // Parse uptime which may contain rssi and snr: "uptime,rssi,snr"
     let uptime = '0';
     let rssi = '';
     let snr = '';
 
-    if (parts[5]) {
-      const uptimeParts = parts[5].split(',');
+    if (parts[6]) {
+      const uptimeParts = parts[6].split(',');
+      uptime = uptimeParts[0] || '0';
+      rssi = uptimeParts[1] || '';
+      snr = uptimeParts[2] || '';
+    }
+
+    const statusData = {
+      deviceId: deviceId,
+      deviceName: deviceId,
+      status: actualStatus,
+      latitude: parseFloat(parts[2]),
+      longitude: parseFloat(parts[3]),
+      speed: parts[4] || '0km/h',
+      satellites: parts[5] || '0sat',
+      uptime: uptime,
+      rssi: rssi,
+      snr: snr,
+      payload: payload,
+      timestamp: Date.now(),
+    };
+
+    latestStatusByDevice.set(deviceId, statusData);
+    broadcast(statusData);
+    return res.json({ success: true, message: 'Status updated' });
+  }
+
+  // EMERGENCY and NORMAL messages need full GPS data
+  if (parts.length >= 7) {
+    // Parse uptime which may contain rssi and snr: "uptime,rssi,snr"
+    let uptime = '0';
+    let rssi = '';
+    let snr = '';
+
+    if (parts[6]) {
+      const uptimeParts = parts[6].split(',');
       uptime = uptimeParts[0] || '0';
       rssi = uptimeParts[1] || '';
       snr = uptimeParts[2] || '';
     }
 
     const alertData = {
-      status: status,
-      latitude: parseFloat(parts[1]),
-      longitude: parseFloat(parts[2]),
-      speed: parts[3] || '0km/h',
-      satellites: parts[4] || '0sat',
+      deviceId: deviceId,
+      deviceName: deviceId,
+      status: actualStatus,
+      latitude: parseFloat(parts[2]),
+      longitude: parseFloat(parts[3]),
+      speed: parts[4] || '0km/h',
+      satellites: parts[5] || '0sat',
       uptime: uptime,
       rssi: rssi,
       snr: snr,
@@ -149,16 +192,14 @@ app.post('/api/alerts', async (req, res) => {
       rawPayload: payload
     };
 
-    // Update latest status
-    latestStatus = {
-      status: status,
+    // Update latest status for this device
+    latestStatusByDevice.set(deviceId, {
+      ...alertData,
       payload: payload,
-      timestamp: Date.now(),
-      ...alertData
-    };
+    });
 
     // Save only EMERGENCY and NORMAL to MongoDB (not STATUS)
-    if (status === 'EMERGENCY' || status === 'NORMAL') {
+    if (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL') {
       try {
         const location = new Location(alertData);
         await location.save();
@@ -171,11 +212,11 @@ app.post('/api/alerts', async (req, res) => {
     }
 
     // Broadcast to all WebSocket clients (all modes including STATUS)
-    broadcast(latestStatus);
+    broadcast(latestStatusByDevice.get(deviceId));
 
-    res.json({ success: true, message: 'Alert received' + (status === 'EMERGENCY' || status === 'NORMAL' ? ' and saved' : '') });
+    res.json({ success: true, message: 'Alert received' + (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL' ? ' and saved' : '') });
   } else {
-    res.status(400).json({ success: false, message: 'Invalid payload format' });
+    res.status(400).json({ success: false, message: 'Invalid payload format - insufficient data' });
   }
 });
 
@@ -190,9 +231,50 @@ app.get('/api/alerts', async (req, res) => {
   }
 });
 
-// Get latest status
+// Get latest status for all devices
 app.get('/api/status', (req, res) => {
-  res.json(latestStatus);
+  const allStatuses = Array.from(latestStatusByDevice.values());
+  res.json({ devices: allStatuses, count: allStatuses.length });
+});
+
+// Get latest status for specific device
+app.get('/api/status/:deviceId', (req, res) => {
+  const { deviceId } = req.params;
+  const status = latestStatusByDevice.get(deviceId);
+
+  if (status) {
+    res.json(status);
+  } else {
+    res.status(404).json({ success: false, message: 'Device not found' });
+  }
+});
+
+// Get all unique devices
+app.get('/api/devices', async (req, res) => {
+  try {
+    const deviceIds = await Location.distinct('deviceId');
+    const devices = deviceIds.map(id => ({
+      deviceId: id,
+      deviceName: id,
+      latestStatus: latestStatusByDevice.get(id) || null
+    }));
+    res.json({ devices, count: devices.length });
+  } catch (error) {
+    console.error('❌ Error fetching devices:', error);
+    res.status(500).json({ success: false, message: 'Error fetching devices' });
+  }
+});
+
+// Get alerts for specific device
+app.get('/api/alerts/device/:deviceId', async (req, res) => {
+  try {
+    const { deviceId } = req.params;
+    const locations = await Location.find({ deviceId }).sort({ timestamp: -1 });
+    res.json({ locations, count: locations.length });
+  } catch (error) {
+    console.error('❌ Error fetching alerts for device:', error);
+    res.status(500).json({ success: false, message: 'Error fetching alerts' });
+  }
 });
 
 // Delete a specific alert by ID

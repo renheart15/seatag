@@ -5,6 +5,8 @@ import L from 'leaflet';
 import '../utils/leafletIcon';
 
 interface LocationMarker {
+  deviceId: string;
+  deviceName?: string;
   position: LatLngExpression;
   timestamp: number;
   status: string;
@@ -15,6 +17,8 @@ interface LocationMarker {
 }
 
 interface LoRaData {
+  deviceId: string;
+  deviceName?: string;
   status: string;
   latitude: number;
   longitude: number;
@@ -77,7 +81,8 @@ interface LocationTrackerProps {
 
 export default function LocationTracker({ onNavigateToLogs }: LocationTrackerProps) {
   const [userLocation, setUserLocation] = useState<LatLngExpression>([14.5995, 120.9842]); // Manila default
-  const [latestMarker, setLatestMarker] = useState<LocationMarker | null>(null);
+  const [deviceMarkers, setDeviceMarkers] = useState<Map<string, LocationMarker>>(new Map());
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [deviceLocation, setDeviceLocation] = useState<LatLngExpression | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [loraStatus, setLoraStatus] = useState<string>('Connecting...');
@@ -102,14 +107,16 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
           const data: LoRaData = JSON.parse(event.data);
           console.log('📡 Received LoRa data:', data);
 
-          if (data.latitude && data.longitude) {
+          if (data.latitude && data.longitude && data.deviceId) {
             const newPosition: LatLngExpression = [data.latitude, data.longitude];
 
-            // Update map center
+            // Update map center to the latest device update
             setUserLocation(newPosition);
 
-            // Update latest marker (only keep the most recent one)
+            // Create marker for this device
             const newMarker: LocationMarker = {
+              deviceId: data.deviceId,
+              deviceName: data.deviceName || data.deviceId,
               position: newPosition,
               timestamp: data.timestamp || Date.now(),
               status: data.status,
@@ -119,19 +126,24 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
               snr: data.snr
             };
 
-            setLatestMarker(newMarker);
+            // Update markers map for this device
+            setDeviceMarkers(prev => {
+              const updated = new Map(prev);
+              updated.set(data.deviceId, newMarker);
+              return updated;
+            });
 
-            // Update status
+            // Update status (for the most recent update)
             setLoraStatus(data.status);
             setLastLoraUpdate(new Date(data.timestamp).toLocaleTimeString());
 
             // Show notifications
             if (data.status === 'EMERGENCY') {
-              showToast('🚨 EMERGENCY ALERT RECEIVED!');
+              showToast(`🚨 EMERGENCY from ${data.deviceName || data.deviceId}!`);
             } else if (data.status === 'NORMAL') {
-              showToast('✅ Location updated - Normal status');
+              showToast(`✅ ${data.deviceName || data.deviceId} - Normal status`);
             } else if (data.status === 'STATUS') {
-              showToast('📍 Status update received');
+              showToast(`📍 Status update from ${data.deviceName || data.deviceId}`);
             }
           }
         } catch (err) {
@@ -193,13 +205,20 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
     }
   };
 
-  // Calculate distance between device and transmitter
+  // Calculate distance between device and nearest/selected transmitter
   const getDistanceToTransmitter = (): string | null => {
-    if (!deviceLocation || !latestMarker) return null;
+    if (!deviceLocation || deviceMarkers.size === 0) return null;
 
     const [devLat, devLon] = deviceLocation as [number, number];
-    const [transLat, transLon] = latestMarker.position as [number, number];
 
+    // Use selected device or the first available device
+    const targetMarker = selectedDeviceId
+      ? deviceMarkers.get(selectedDeviceId)
+      : Array.from(deviceMarkers.values())[0];
+
+    if (!targetMarker) return null;
+
+    const [transLat, transLon] = targetMarker.position as [number, number];
     const distance = calculateDistance(devLat, devLon, transLat, transLon);
     return formatDistance(distance);
   };
@@ -317,6 +336,27 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
           </div>
         )}
 
+        {/* Device Selector */}
+        {deviceMarkers.size > 1 && (
+          <div className="bg-white rounded-lg shadow-lg p-4 mb-6">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Select Device to Track ({deviceMarkers.size} devices active)
+            </label>
+            <select
+              value={selectedDeviceId || ''}
+              onChange={(e) => setSelectedDeviceId(e.target.value || null)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            >
+              <option value="">All Devices</option>
+              {Array.from(deviceMarkers.values()).map((marker) => (
+                <option key={marker.deviceId} value={marker.deviceId}>
+                  {marker.deviceName || marker.deviceId} - {marker.status} (Last update: {new Date(marker.timestamp).toLocaleTimeString()})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Map Container */}
         <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-6">
           <div className="h-[500px] relative">
@@ -333,26 +373,54 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
               <RecenterMap center={userLocation} />
               <CenterMapButton center={userLocation} />
 
-              {latestMarker && (
-                <Marker position={latestMarker.position}>
-                  <Popup>
-                    <div className="text-sm">
-                      <p className="font-semibold text-blue-600">
-                        📡 TRANSMITTER - {latestMarker.status === 'EMERGENCY' ? '🚨 EMERGENCY' :
-                         latestMarker.status === 'NORMAL' ? '✅ Normal' :
-                         latestMarker.status === 'STATUS' ? '📍 Status' : 'Location'}
-                      </p>
-                      <p className="text-gray-600">
-                        {new Date(latestMarker.timestamp).toLocaleString()}
-                      </p>
-                      {latestMarker.speed && <p className="text-gray-600">Speed: {latestMarker.speed}</p>}
-                      {latestMarker.satellites && <p className="text-gray-600">Satellites: {latestMarker.satellites}</p>}
-                      {latestMarker.rssi && <p className="text-gray-600">RSSI: {latestMarker.rssi} dBm</p>}
-                      {latestMarker.snr && <p className="text-gray-600">SNR: {latestMarker.snr} dB</p>}
-                    </div>
-                  </Popup>
-                </Marker>
-              )}
+              {Array.from(deviceMarkers.values()).map((marker) => {
+                const isEmergency = marker.status === 'EMERGENCY';
+                const isNormal = marker.status === 'NORMAL';
+                const isStatus = marker.status === 'STATUS';
+
+                // Different colored markers for different statuses
+                let markerIconUrl = 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png';
+                if (isEmergency) {
+                  markerIconUrl = 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png';
+                } else if (isNormal) {
+                  markerIconUrl = 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png';
+                } else if (isStatus) {
+                  markerIconUrl = 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png';
+                }
+
+                return (
+                  <Marker
+                    key={marker.deviceId}
+                    position={marker.position}
+                    icon={new L.Icon({
+                      iconUrl: markerIconUrl,
+                      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                      iconSize: [25, 41],
+                      iconAnchor: [12, 41],
+                      popupAnchor: [1, -34],
+                      shadowSize: [41, 41]
+                    })}
+                  >
+                    <Popup>
+                      <div className="text-sm">
+                        <p className="font-semibold text-blue-600">
+                          📡 {marker.deviceName || marker.deviceId}
+                        </p>
+                        <p className={`font-semibold ${isEmergency ? 'text-red-600' : isNormal ? 'text-green-600' : 'text-yellow-600'}`}>
+                          {isEmergency ? '🚨 EMERGENCY' : isNormal ? '✅ Normal' : isStatus ? '📍 Status' : 'Location'}
+                        </p>
+                        <p className="text-gray-600">
+                          {new Date(marker.timestamp).toLocaleString()}
+                        </p>
+                        {marker.speed && <p className="text-gray-600">Speed: {marker.speed}</p>}
+                        {marker.satellites && <p className="text-gray-600">Satellites: {marker.satellites}</p>}
+                        {marker.rssi && <p className="text-gray-600">RSSI: {marker.rssi} dBm</p>}
+                        {marker.snr && <p className="text-gray-600">SNR: {marker.snr} dB</p>}
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
 
               {deviceLocation && (
                 <Marker
@@ -420,13 +488,26 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
             <h3 className="font-semibold text-gray-700 mb-2">📍 Map Markers</h3>
             <div className="space-y-2 text-sm text-gray-600">
               <div className="flex items-center gap-2">
+                <div className="w-6 h-6 bg-red-500 rounded-full"></div>
+                <span><strong>Red Marker:</strong> Transmitter in EMERGENCY mode</span>
+              </div>
+              <div className="flex items-center gap-2">
                 <div className="w-6 h-6 bg-blue-500 rounded-full"></div>
-                <span><strong>Blue Marker:</strong> Transmitter location (LoRa GPS)</span>
+                <span><strong>Blue Marker:</strong> Transmitter in NORMAL mode</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 bg-yellow-500 rounded-full"></div>
+                <span><strong>Yellow Marker:</strong> Transmitter in STATUS mode</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 bg-green-500 rounded-full"></div>
                 <span><strong>Green Marker:</strong> Your device location (auto-tracked)</span>
               </div>
+              {deviceMarkers.size > 0 && (
+                <p className="mt-2 text-xs text-indigo-600 font-semibold">
+                  {deviceMarkers.size} transmitter{deviceMarkers.size > 1 ? 's' : ''} currently active
+                </p>
+              )}
             </div>
           </div>
         </div>
