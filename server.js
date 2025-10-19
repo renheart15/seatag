@@ -20,6 +20,8 @@ mongoose.connect(MONGODB_URI)
 
 // MongoDB Schema
 const alertSchema = new mongoose.Schema({
+  deviceId: String,
+  deviceName: String,
   status: String,
   latitude: Number,
   longitude: Number,
@@ -47,6 +49,8 @@ async function loadLatestStatus() {
     const latestAlert = await Alert.findOne().sort({ timestamp: -1 });
     if (latestAlert) {
       latestStatus = {
+        deviceId: latestAlert.deviceId || 'Unknown',
+        deviceName: latestAlert.deviceName || latestAlert.deviceId || 'Unknown Device',
         status: latestAlert.status,
         payload: latestAlert.rawPayload,
         timestamp: latestAlert.timestamp.getTime(),
@@ -116,11 +120,18 @@ app.post('/api/alerts', async (req, res) => {
 
   const parts = payload.split('|');
 
-  // All messages (STATUS, EMERGENCY, NORMAL) need full GPS data to display on map
-  if (parts.length < 3) {
+  // Parse device ID and actual status from payload
+  // Format: DEVICE_ID|STATUS|lat|lng|speed|satellites|uptime,rssi,snr
+  if (parts.length < 7) {
     console.error('❌ Invalid format - not enough parts:', { payload, parts });
     return res.status(400).json({ success: false, message: 'Invalid format' });
   }
+
+  const deviceId = parts[0] || 'Unknown';
+  const actualStatus = parts[1] || status;
+
+  console.log('📱 Device ID:', deviceId);
+  console.log('📝 Status:', actualStatus);
 
   // Parse uptime,rssi,snr from parts[6]
   let uptime = '0';
@@ -135,7 +146,9 @@ app.post('/api/alerts', async (req, res) => {
   }
 
   const alertData = {
-    status,
+    deviceId,
+    deviceName: deviceId,
+    status: actualStatus,
     latitude: parseFloat(parts[2]),
     longitude: parseFloat(parts[3]),
     speed: parts[4] || '0km/h',
@@ -148,15 +161,23 @@ app.post('/api/alerts', async (req, res) => {
   };
 
   latestStatus = {
-    status,
+    deviceId,
+    deviceName: deviceId,
+    status: actualStatus,
     payload,
     timestamp: Date.now(),
-    ...alertData,
+    latitude: alertData.latitude,
+    longitude: alertData.longitude,
+    speed: alertData.speed,
+    satellites: alertData.satellites,
+    uptime: alertData.uptime,
+    rssi: alertData.rssi,
+    snr: alertData.snr,
   };
 
   try {
     // Only save EMERGENCY and NORMAL to database, not STATUS
-    if (status === 'EMERGENCY' || status === 'NORMAL') {
+    if (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL') {
       const alert = new Alert(alertData);
       await alert.save();
       console.log('💾 Alert saved to MongoDB');
