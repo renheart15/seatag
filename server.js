@@ -135,8 +135,8 @@ app.post('/api/alerts', async (req, res) => {
 
   const alertData = {
     status,
-    latitude: parseFloat(parts[1]),
-    longitude: parseFloat(parts[2]),
+    latitude: parseFloat(parts[2]),
+    longitude: parseFloat(parts[3]),
     speed: parts[3] || '0km/h',
     satellites: parts[4] || '0sat',
     uptime,
