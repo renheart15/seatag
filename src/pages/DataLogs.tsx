@@ -366,7 +366,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
         )}
 
         {/* Action Buttons */}
-        <div className="flex flex-nowrap overflow-x-auto gap-2 sm:gap-4 mb-4 sm:mb-6 pb-2">
+        <div className="flex flex-nowrap overflow-x-auto gap-2 sm:gap-4 mb-4 sm:mb-6 pb-2 relative z-40">
           <button
             onClick={onNavigateToMap}
             className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 rounded-lg shadow-md transition duration-300 text-sm sm:text-base"
@@ -399,7 +399,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
 
             {/* Dropdown Menu */}
             {showExportDropdown && !loading && logs.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden text-sm sm:text-base">
+              <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 z-50 text-sm sm:text-base min-w-[280px]">
                 <button
                   onClick={() => {
                     exportToPDF();
