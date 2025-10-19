@@ -366,7 +366,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
         )}
 
         {/* Action Buttons */}
-        <div className="flex flex-nowrap overflow-x-auto gap-2 sm:gap-4 mb-4 sm:mb-6 pb-2 relative z-40">
+        <div className={`flex flex-nowrap overflow-x-auto gap-2 sm:gap-4 pb-2 relative z-40 ${showExportDropdown ? 'mb-32' : 'mb-4 sm:mb-6'}`}>
           <button
             onClick={onNavigateToMap}
             className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 rounded-lg shadow-md transition duration-300 text-sm sm:text-base"
@@ -493,7 +493,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
           </div>
         ) : viewMode === 'table' ? (
           /* Table View */
-          <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+          <div className="bg-white rounded-lg shadow-lg overflow-hidden relative z-10">
             <div className="overflow-x-auto overflow-y-auto max-h-[70vh] sm:max-h-[75vh]
                             -mx-4 sm:mx-0 px-4 sm:px-0
                             scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent
