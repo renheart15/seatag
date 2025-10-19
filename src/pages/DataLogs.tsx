@@ -399,7 +399,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
 
             {/* Dropdown Menu */}
             {showExportDropdown && !loading && logs.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 z-10 overflow-hidden text-sm sm:text-base">
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden text-sm sm:text-base">
                 <button
                   onClick={() => {
                     exportToPDF();
