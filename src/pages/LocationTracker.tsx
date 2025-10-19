@@ -83,8 +83,6 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   const [loraStatus, setLoraStatus] = useState<string>('Connecting...');
   const [lastLoraUpdate, setLastLoraUpdate] = useState<string>('');
   const [loraConnected, setLoraConnected] = useState(false);
-  const [trackingDevice, setTrackingDevice] = useState(false);
-
   const wsRef = useRef<WebSocket | null>(null);
   const watchIdRef = useRef<number | null>(null);
 
@@ -206,49 +204,32 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
     return formatDistance(distance);
   };
 
-  const toggleDeviceTracking = () => {
-    if (trackingDevice) {
-      // Stop tracking
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
-      setTrackingDevice(false);
-      setDeviceLocation(null);
-      showToast('Device tracking stopped');
-    } else {
-      // Start tracking
-      if (!navigator.geolocation) {
-        showToast('Geolocation is not supported');
-        return;
-      }
-
-      const watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          const newPosition: LatLngExpression = [latitude, longitude];
-          setDeviceLocation(newPosition);
-          if (!trackingDevice) {
-            showToast('Device tracking started');
-          }
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
-          showToast('Failed to get device location');
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        }
-      );
-
-      watchIdRef.current = watchId;
-      setTrackingDevice(true);
-    }
-  };
-
+  // Auto-start device tracking on mount
   useEffect(() => {
+    if (!navigator.geolocation) {
+      showToast('Geolocation is not supported');
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const newPosition: LatLngExpression = [latitude, longitude];
+        setDeviceLocation(newPosition);
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        showToast('Failed to get device location');
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+
+    watchIdRef.current = watchId;
+
     return () => {
       // Cleanup on unmount
       if (watchIdRef.current !== null) {
@@ -408,15 +389,8 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
         {/* Action Buttons */}
         <div className="flex gap-4 flex-wrap">
           <button
-            onClick={toggleDeviceTracking}
-            className={`flex-1 min-w-[200px] ${trackingDevice ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white font-semibold py-4 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-105`}
-          >
-            {trackingDevice ? '📱 Stop Device Tracking' : '📱 Track My Device'}
-          </button>
-
-          <button
             onClick={onNavigateToLogs}
-            className="flex-1 min-w-[200px] bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-105"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-105"
           >
             View Location History
           </button>
@@ -451,7 +425,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 bg-green-500 rounded-full"></div>
-                <span><strong>Green Marker:</strong> Your device location</span>
+                <span><strong>Green Marker:</strong> Your device location (auto-tracked)</span>
               </div>
             </div>
           </div>
