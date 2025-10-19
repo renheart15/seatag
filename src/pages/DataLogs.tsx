@@ -366,7 +366,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
         )}
 
         {/* Action Buttons */}
-        <div className={`flex flex-nowrap overflow-x-auto gap-2 sm:gap-4 pb-2 relative z-40 ${showExportDropdown ? 'mb-32' : 'mb-4 sm:mb-6'}`}>
+        <div className="flex flex-nowrap overflow-x-auto gap-2 sm:gap-4 mb-4 sm:mb-6 pb-2 relative z-40">
           <button
             onClick={onNavigateToMap}
             className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 rounded-lg shadow-md transition duration-300 text-sm sm:text-base"
