@@ -382,7 +382,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
           </button>
 
           {/* Export Dropdown */}
-          <div className="relative flex-shrink-0">
+          <div className="relative flex-shrink-0 z-50">
             <button
               onClick={() => setShowExportDropdown(!showExportDropdown)}
               disabled={logs.length === 0 || loading}
