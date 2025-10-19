@@ -111,23 +111,30 @@ wss.on('connection', (ws) => {
 
 // API endpoint to receive alerts from ESP8266 receiver
 app.post('/api/alerts', async (req, res) => {
-  const { status, payload } = req.body;
+  try {
+    const { status, payload } = req.body;
 
-  if (!status || !payload) {
-    return res.status(400).json({ success: false, message: 'Invalid payload' });
-  }
+    if (!status || !payload) {
+      return res.status(400).json({ success: false, message: 'Invalid payload' });
+    }
 
-  console.log('📨 Received from ESP8266:', { status, payload });
+    console.log('📨 Received from ESP8266:', { status, payload });
 
-  // Parse the payload: DEVICE_ID|STATUS|lat|lng|speed|satellites|uptime,rssi,snr
-  const parts = payload.split('|');
+    // Parse the payload: DEVICE_ID|STATUS|lat|lng|speed|satellites|uptime,rssi,snr
+    const parts = payload.split('|');
 
-  if (parts.length < 2) {
-    return res.status(400).json({ success: false, message: 'Invalid payload format - missing device ID' });
-  }
+    console.log('🔍 Parsed parts:', parts);
+    console.log('🔍 Parts length:', parts.length);
 
-  const deviceId = parts[0];
-  const actualStatus = parts[1];
+    if (parts.length < 2) {
+      return res.status(400).json({ success: false, message: 'Invalid payload format - missing device ID' });
+    }
+
+    const deviceId = parts[0];
+    const actualStatus = parts[1];
+
+    console.log('📱 Device ID:', deviceId);
+    console.log('📝 Actual Status:', actualStatus);
 
   // STATUS messages might have less data, that's okay - just update live status
   if (actualStatus === 'STATUS' && parts.length >= 7) {
@@ -217,6 +224,11 @@ app.post('/api/alerts', async (req, res) => {
     res.json({ success: true, message: 'Alert received' + (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL' ? ' and saved' : '') });
   } else {
     res.status(400).json({ success: false, message: 'Invalid payload format - insufficient data' });
+  }
+  } catch (error) {
+    console.error('❌ Error processing alert:', error);
+    console.error('❌ Error stack:', error.stack);
+    res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
   }
 });
 
