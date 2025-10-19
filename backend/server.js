@@ -14,12 +14,8 @@ app.use(express.json());
 let locations = [];
 let locationIdCounter = 1;
 
-// Store latest status for WebSocket broadcast
-let latestStatus = {
-  status: 'WAITING',
-  payload: 'Waiting for data...',
-  timestamp: Date.now()
-};
+// Store latest status per device for WebSocket broadcast
+let latestStatusByDevice = new Map();
 
 // HTTP server
 const server = createServer(app);
@@ -40,8 +36,10 @@ function broadcast(data) {
 wss.on('connection', (ws) => {
   console.log('✅ WebSocket client connected');
 
-  // Send latest status immediately
-  ws.send(JSON.stringify(latestStatus));
+  // Send latest status for all devices immediately
+  latestStatusByDevice.forEach((status, deviceId) => {
+    ws.send(JSON.stringify(status));
+  });
 
   ws.on('close', () => {
     console.log('❌ WebSocket client disconnected');
@@ -50,79 +48,119 @@ wss.on('connection', (ws) => {
 
 // API endpoint to receive alerts from ESP8266 receiver
 app.post('/api/alerts', (req, res) => {
-  const { status, payload } = req.body;
+  try {
+    const { status, payload } = req.body;
 
-  if (!status || !payload) {
-    return res.status(400).json({ success: false, message: 'Invalid payload' });
-  }
-
-  console.log('📨 Received from ESP8266:', { status, payload });
-
-  // Parse the payload: STATUS|lat|lng|speed|satellites|uptime,rssi,snr
-  const parts = payload.split('|');
-
-  // STATUS messages might have less data, that's okay - just update live status
-  if (status === 'STATUS') {
-    latestStatus = {
-      status,
-      payload,
-      timestamp: Date.now(),
-    };
-    broadcast(latestStatus);
-    return res.json({ success: true, message: 'Status updated' });
-  }
-
-  // EMERGENCY and NORMAL messages need full GPS data
-  if (parts.length >= 3) {
-    // Parse uptime, rssi, snr from the last part
-    let uptime = parts[5] || '0';
-    let rssi = '';
-    let snr = '';
-
-    if (parts[5] && parts[5].includes(',')) {
-      const uptimeParts = parts[5].split(',');
-      uptime = uptimeParts[0] || '0';
-      rssi = uptimeParts[1] || '';
-      snr = uptimeParts[2] || '';
+    if (!status || !payload) {
+      return res.status(400).json({ success: false, message: 'Invalid payload' });
     }
 
-    const alertData = {
-      _id: (locationIdCounter++).toString(),
-      status: status,
-      latitude: parseFloat(parts[1]),
-      longitude: parseFloat(parts[2]),
-      speed: parts[3] || '0km/h',
-      satellites: parts[4] || '0sat',
-      uptime: uptime,
-      rssi: rssi,
-      snr: snr,
-      timestamp: new Date().toISOString(),
-      rawPayload: payload
-    };
+    console.log('📨 Received:', { status, payload });
 
-    // Update latest status
-    latestStatus = {
-      status: status,
-      payload: payload,
-      timestamp: Date.now(),
-      ...alertData
-    };
+    // Parse the payload: DEVICE_ID|STATUS|lat|lng|speed|satellites|uptime,rssi,snr
+    const parts = payload.split('|');
 
-    // Save only EMERGENCY and NORMAL to database (not STATUS)
-    if (status === 'EMERGENCY' || status === 'NORMAL') {
-      locations.push(alertData);
-      console.log('💾 Location saved to database:', alertData);
-      console.log(`📊 Total locations in database: ${locations.length}`);
+    console.log('🔍 Parsed parts:', parts);
+    console.log('🔍 Parts length:', parts.length);
+
+    if (parts.length < 2) {
+      return res.status(400).json({ success: false, message: 'Invalid payload format - missing device ID' });
+    }
+
+    const deviceId = parts[0];
+    const actualStatus = parts[1];
+
+    console.log('📱 Device ID:', deviceId);
+    console.log('📝 Actual Status:', actualStatus);
+
+    // STATUS messages might have less data, that's okay - just update live status
+    if (actualStatus === 'STATUS' && parts.length >= 7) {
+      let uptime = '0';
+      let rssi = '';
+      let snr = '';
+
+      if (parts[6]) {
+        const uptimeParts = parts[6].split(',');
+        uptime = uptimeParts[0] || '0';
+        rssi = uptimeParts[1] || '';
+        snr = uptimeParts[2] || '';
+      }
+
+      const statusData = {
+        deviceId: deviceId,
+        deviceName: deviceId,
+        status: actualStatus,
+        latitude: parseFloat(parts[2]),
+        longitude: parseFloat(parts[3]),
+        speed: parts[4] || '0km/h',
+        satellites: parts[5] || '0sat',
+        uptime: uptime,
+        rssi: rssi,
+        snr: snr,
+        payload: payload,
+        timestamp: Date.now(),
+      };
+
+      latestStatusByDevice.set(deviceId, statusData);
+      broadcast(statusData);
+      return res.json({ success: true, message: 'Status updated' });
+    }
+
+    // EMERGENCY and NORMAL messages need full GPS data
+    if (parts.length >= 7) {
+      let uptime = '0';
+      let rssi = '';
+      let snr = '';
+
+      if (parts[6]) {
+        const uptimeParts = parts[6].split(',');
+        uptime = uptimeParts[0] || '0';
+        rssi = uptimeParts[1] || '';
+        snr = uptimeParts[2] || '';
+      }
+
+      const alertData = {
+        _id: (locationIdCounter++).toString(),
+        deviceId: deviceId,
+        deviceName: deviceId,
+        status: actualStatus,
+        latitude: parseFloat(parts[2]),
+        longitude: parseFloat(parts[3]),
+        speed: parts[4] || '0km/h',
+        satellites: parts[5] || '0sat',
+        uptime: uptime,
+        rssi: rssi,
+        snr: snr,
+        timestamp: new Date().toISOString(),
+        rawPayload: payload
+      };
+
+      // Update latest status for this device
+      latestStatusByDevice.set(deviceId, {
+        ...alertData,
+        payload: payload,
+      });
+
+      // Save only EMERGENCY and NORMAL to in-memory storage (not STATUS)
+      if (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL') {
+        locations.push(alertData);
+        console.log('💾 Location saved:', alertData);
+        console.log(`📊 Total locations: ${locations.length}`);
+      } else {
+        console.log('📍 STATUS mode - displayed on frontend only');
+      }
+
+      // Broadcast to all WebSocket clients (all modes including STATUS)
+      broadcast(latestStatusByDevice.get(deviceId));
+
+      res.json({ success: true, message: 'Alert received' + (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL' ? ' and saved' : '') });
     } else {
-      console.log('📍 STATUS mode - displayed on frontend only (not saved to database)');
+      res.status(400).json({ success: false, message: 'Invalid payload format - insufficient data' });
     }
-
-    // Broadcast to all WebSocket clients (all modes including STATUS)
-    broadcast(latestStatus);
-
-    res.json({ success: true, message: 'Alert received' + (status === 'EMERGENCY' || status === 'NORMAL' ? ' and saved' : '') });
-  } else {
-    res.status(400).json({ success: false, message: 'Invalid payload format' });
+  } catch (error) {
+    console.error('❌ Error processing alert:', error);
+    console.error('❌ Error stack:', error.stack);
+    res.status(500).json({ success: false, message: 'Internal server error', error: error.message });
   }
 });
 
