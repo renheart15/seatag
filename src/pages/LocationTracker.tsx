@@ -195,7 +195,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       gainNode.connect(audioContext.destination);
 
       // Set frequency for an alert tone (300 Hz - lower, more urgent sound)
-      oscillator.frequency.value = 300;
+      oscillator.frequency.value = 2300;
       oscillator.type = 'sine';
 
       // Set initial volume to 0
