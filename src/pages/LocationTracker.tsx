@@ -195,7 +195,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       gainNode.connect(audioContext.destination);
 
       // Set frequency for an alert tone (800 Hz)
-      oscillator.frequency.value = 800;
+      oscillator.frequency.value = 300;
       oscillator.type = 'sine';
 
       // Set volume
@@ -206,7 +206,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       const pauseDuration = 0.1; // seconds
       let currentTime = audioContext.currentTime;
 
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 10; i++) {
         gainNode.gain.setValueAtTime(0.3, currentTime);
         gainNode.gain.setValueAtTime(0, currentTime + beepDuration);
         currentTime += beepDuration + pauseDuration;
