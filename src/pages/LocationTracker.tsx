@@ -194,20 +194,20 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
-      // Set frequency for an alert tone (800 Hz)
+      // Set frequency for an alert tone (300 Hz - lower, more urgent sound)
       oscillator.frequency.value = 300;
       oscillator.type = 'sine';
 
-      // Set volume
-      gainNode.gain.value = 0.3;
+      // Set initial volume to 0
+      gainNode.gain.value = 0;
 
-      // Play beep pattern: beep-beep-beep (3 times)
+      // Play beep pattern: 10 beeps for more noticeable alert
       const beepDuration = 0.15; // seconds
       const pauseDuration = 0.1; // seconds
       let currentTime = audioContext.currentTime;
 
       for (let i = 0; i < 10; i++) {
-        gainNode.gain.setValueAtTime(0.3, currentTime);
+        gainNode.gain.setValueAtTime(0.9, currentTime);
         gainNode.gain.setValueAtTime(0, currentTime + beepDuration);
         currentTime += beepDuration + pauseDuration;
       }
