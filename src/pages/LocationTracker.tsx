@@ -140,6 +140,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
             // Show notifications
             if (data.status === 'EMERGENCY') {
               showToast(`🚨 EMERGENCY from ${data.deviceName || data.deviceId}!`);
+              playEmergencyAlert(); // Play alarm sound
             } else if (data.status === 'NORMAL') {
               showToast(`✅ ${data.deviceName || data.deviceId} - Normal status`);
             } else if (data.status === 'STATUS') {
@@ -179,6 +180,45 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   const showToast = (message: string) => {
     setToast(message);
     setTimeout(() => setToast(null), 3000);
+  };
+
+  // Play emergency alarm sound
+  const playEmergencyAlert = () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+      // Create an oscillator for the beep sound
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      // Set frequency for an alert tone (800 Hz)
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+
+      // Set volume
+      gainNode.gain.value = 0.3;
+
+      // Play beep pattern: beep-beep-beep (3 times)
+      const beepDuration = 0.15; // seconds
+      const pauseDuration = 0.1; // seconds
+      let currentTime = audioContext.currentTime;
+
+      for (let i = 0; i < 3; i++) {
+        gainNode.gain.setValueAtTime(0.3, currentTime);
+        gainNode.gain.setValueAtTime(0, currentTime + beepDuration);
+        currentTime += beepDuration + pauseDuration;
+      }
+
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(currentTime);
+
+      console.log('🔊 Emergency alert sound played');
+    } catch (error) {
+      console.error('Error playing emergency alert:', error);
+    }
   };
 
   // Calculate distance using Haversine formula
