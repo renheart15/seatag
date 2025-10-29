@@ -176,14 +176,12 @@ app.post('/api/alerts', async (req, res) => {
   };
 
   try {
-    // Only save EMERGENCY and NORMAL to database, not STATUS
-    if (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL') {
-      const alert = new Alert(alertData);
-      await alert.save();
-      console.log('💾 Alert saved to MongoDB');
-    }
+    // Save all modes to database (EMERGENCY, NORMAL, and STATUS)
+    const alert = new Alert(alertData);
+    await alert.save();
+    console.log(`💾 ${actualStatus} alert saved to MongoDB`);
 
-    // Broadcast all messages (including STATUS) to frontend
+    // Broadcast all messages to frontend
     broadcast(latestStatus);
     res.json({ success: true, message: 'Alert processed' });
   } catch (err) {

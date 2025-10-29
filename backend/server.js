@@ -136,7 +136,7 @@ app.post('/api/alerts', async (req, res) => {
     console.log('📱 Device ID:', deviceId);
     console.log('📝 Actual Status:', actualStatus);
 
-  // STATUS messages might have less data, that's okay - just update live status
+  // STATUS messages are now saved to database like EMERGENCY and NORMAL
   if (actualStatus === 'STATUS' && parts.length >= 7) {
     // Parse uptime which may contain rssi and snr: "uptime,rssi,snr"
     let uptime = '0';
@@ -150,24 +150,50 @@ app.post('/api/alerts', async (req, res) => {
       snr = uptimeParts[2] || '';
     }
 
+    const lat = parseFloat((parts[2] || '').trim());
+    const lng = parseFloat((parts[3] || '').trim());
+
+    if (isNaN(lat) || isNaN(lng)) {
+      console.error('⚠️ Invalid coordinates in STATUS:', parts[2], parts[3]);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid coordinates received',
+        received: { lat: parts[2], lng: parts[3] },
+      });
+    }
+
     const statusData = {
       deviceId: deviceId,
       deviceName: deviceId,
       status: actualStatus,
-      latitude: parseFloat(parts[2]),
-      longitude: parseFloat(parts[3]),
+      latitude: lat,
+      longitude: lng,
       speed: parts[4] || '0km/h',
       satellites: parts[5] || '0sat',
       uptime: uptime,
       rssi: rssi,
       snr: snr,
-      payload: payload,
+      rawPayload: payload,
       timestamp: Date.now(),
     };
 
-    latestStatusByDevice.set(deviceId, statusData);
-    broadcast(statusData);
-    return res.json({ success: true, message: 'Status updated' });
+    latestStatusByDevice.set(deviceId, {
+      ...statusData,
+      payload: payload,
+    });
+
+    // Save STATUS to database
+    try {
+      const location = new Location(statusData);
+      await location.save();
+      console.log('💾 STATUS saved to database:', statusData);
+    } catch (error) {
+      console.error('❌ Error saving STATUS to database:', error.message);
+      return res.status(500).json({ success: false, message: 'Database save error', error: error.message });
+    }
+
+    broadcast(latestStatusByDevice.get(deviceId));
+    return res.json({ success: true, message: 'Status updated and saved' });
   }
 
   // EMERGENCY and NORMAL messages need full GPS data
@@ -216,24 +242,20 @@ app.post('/api/alerts', async (req, res) => {
       payload: payload,
     });
 
-    // Save only EMERGENCY and NORMAL to MongoDB (not STATUS)
-    if (actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL') {
-      try {
-        const location = new Location(alertData);
-        await location.save();
-        console.log('💾 Location saved to database:', alertData);
-      } catch (error) {
-        console.error('❌ Error saving to database:', error.message);
-        return res.status(500).json({ success: false, message: 'Database save error', error: error.message });
-      }
-    } else {
-      console.log('📍 STATUS mode - displayed on frontend only (not saved to database)');
+    // Save all modes (EMERGENCY, NORMAL, and STATUS) to MongoDB
+    try {
+      const location = new Location(alertData);
+      await location.save();
+      console.log(`💾 ${actualStatus} saved to database:`, alertData);
+    } catch (error) {
+      console.error('❌ Error saving to database:', error.message);
+      return res.status(500).json({ success: false, message: 'Database save error', error: error.message });
     }
 
     broadcast(latestStatusByDevice.get(deviceId));
     return res.json({
       success: true,
-      message: `Alert received${(actualStatus === 'EMERGENCY' || actualStatus === 'NORMAL') ? ' and saved' : ''}`,
+      message: `${actualStatus} alert received and saved`,
     });
   } else {
     res.status(400).json({ success: false, message: 'Invalid payload format - insufficient data' });

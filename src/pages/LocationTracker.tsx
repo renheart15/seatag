@@ -84,12 +84,18 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   const [deviceMarkers, setDeviceMarkers] = useState<Map<string, LocationMarker>>(new Map());
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [deviceLocation, setDeviceLocation] = useState<LatLngExpression | null>(null);
+  const [deviceLocationAccuracy, setDeviceLocationAccuracy] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [loraStatus, setLoraStatus] = useState<string>('Connecting...');
   const [lastLoraUpdate, setLastLoraUpdate] = useState<string>('');
   const [loraConnected, setLoraConnected] = useState(false);
+  const [isAlertRinging, setIsAlertRinging] = useState(false);
+  const [rescueAcknowledged, setRescueAcknowledged] = useState(false);
+  const [acknowledgedDeviceId, setAcknowledgedDeviceId] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
 
   // WebSocket connection for LoRa data
   useEffect(() => {
@@ -140,9 +146,16 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
             // Show notifications
             if (data.status === 'EMERGENCY') {
               showToast(`🚨 EMERGENCY from ${data.deviceName || data.deviceId}!`);
-              playEmergencyAlert(); // Play alarm sound
+              // Only play alert if not already acknowledged
+              if (!rescueAcknowledged || acknowledgedDeviceId !== data.deviceId) {
+                playEmergencyAlert(data.deviceId); // Play alarm sound
+              }
             } else if (data.status === 'NORMAL') {
               showToast(`✅ ${data.deviceName || data.deviceId} - Normal status`);
+              // Only play alert if not already acknowledged
+              if (!rescueAcknowledged || acknowledgedDeviceId !== data.deviceId) {
+                playEmergencyAlert(data.deviceId); // Play alarm sound for NORMAL mode too
+              }
             } else if (data.status === 'STATUS') {
               showToast(`📍 Status update from ${data.deviceName || data.deviceId}`);
             }
@@ -174,6 +187,8 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       if (wsRef.current) {
         wsRef.current.close();
       }
+      // Stop any playing alerts on unmount
+      stopEmergencyAlert();
     };
   }, []);
 
@@ -182,31 +197,41 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Play emergency alarm sound
-  const playEmergencyAlert = () => {
+  // Play emergency alarm sound (continuous until stopped)
+  const playEmergencyAlert = (deviceId: string) => {
+    // Don't play if already acknowledged
+    if (rescueAcknowledged && acknowledgedDeviceId === deviceId) {
+      return;
+    }
+
+    // Stop any existing alert first
+    stopEmergencyAlert();
+
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioContext;
 
-      // Create an oscillator for the beep sound
+      // Create an oscillator for continuous beeping
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
 
       oscillator.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
-      // Set frequency for an alert tone (300 Hz - lower, more urgent sound)
+      // Set frequency for an alert tone (2300 Hz - urgent sound)
       oscillator.frequency.value = 2300;
       oscillator.type = 'sine';
 
       // Set initial volume to 0
       gainNode.gain.value = 0;
 
-      // Play beep pattern: 10 beeps for more noticeable alert
+      // Create repeating beep pattern
       const beepDuration = 0.15; // seconds
       const pauseDuration = 0.1; // seconds
       let currentTime = audioContext.currentTime;
 
-      for (let i = 0; i < 10; i++) {
+      // Loop 40 beeps (about 10 seconds of beeping)
+      for (let i = 0; i < 40; i++) {
         gainNode.gain.setValueAtTime(0.9, currentTime);
         gainNode.gain.setValueAtTime(0, currentTime + beepDuration);
         currentTime += beepDuration + pauseDuration;
@@ -214,11 +239,46 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
 
       oscillator.start(audioContext.currentTime);
       oscillator.stop(currentTime);
+      oscillatorRef.current = oscillator;
 
-      console.log('🔊 Emergency alert sound played');
+      setIsAlertRinging(true);
+      console.log('🔊 Emergency alert sound started');
+
+      // Auto-stop after completion
+      setTimeout(() => {
+        setIsAlertRinging(false);
+      }, currentTime * 1000);
     } catch (error) {
       console.error('Error playing emergency alert:', error);
     }
+  };
+
+  // Stop the emergency alert sound
+  const stopEmergencyAlert = () => {
+    try {
+      if (oscillatorRef.current) {
+        oscillatorRef.current.stop();
+        oscillatorRef.current.disconnect();
+        oscillatorRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+      setIsAlertRinging(false);
+      console.log('🔇 Emergency alert stopped');
+    } catch (error) {
+      console.error('Error stopping alert:', error);
+    }
+  };
+
+  // Acknowledge rescue - stops alert and marks as acknowledged
+  const acknowledgeRescue = (deviceId: string) => {
+    stopEmergencyAlert();
+    setRescueAcknowledged(true);
+    setAcknowledgedDeviceId(deviceId);
+    showToast('✅ Rescue acknowledged! Alert stopped.');
+    console.log(`✅ Rescue acknowledged for device: ${deviceId}`);
   };
 
   // Calculate distance using Haversine formula
@@ -272,18 +332,41 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
-        const { latitude, longitude } = position.coords;
+        const { latitude, longitude, accuracy } = position.coords;
         const newPosition: LatLngExpression = [latitude, longitude];
         setDeviceLocation(newPosition);
+        setDeviceLocationAccuracy(accuracy);
+
+        console.log(`📍 Device location updated: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (±${accuracy.toFixed(1)}m)`);
+
+        // Show warning if accuracy is poor (> 50 meters)
+        if (accuracy > 50) {
+          console.warn(`⚠️ Low GPS accuracy: ±${accuracy.toFixed(1)}m. Move to open area for better signal.`);
+        }
       },
       (error) => {
         console.error('Geolocation error:', error);
-        showToast('Failed to get device location');
+        let errorMessage = 'Failed to get device location';
+
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location permission denied. Please enable location access.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location unavailable. Check your GPS settings.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out. Retrying...';
+            break;
+        }
+
+        showToast(errorMessage);
+        console.error('Geolocation error details:', errorMessage);
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
+        timeout: 30000, // Increased to 30 seconds for better accuracy
+        maximumAge: 5000, // Allow cached position up to 5 seconds old
       }
     );
 
@@ -317,6 +400,28 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
             </div>
           </div>
         </div>
+
+        {/* GPS Accuracy Indicator */}
+        {deviceLocation && deviceLocationAccuracy !== null && (
+          <div className={`rounded-lg shadow-lg p-4 mb-6 ${deviceLocationAccuracy > 50 ? 'bg-gradient-to-r from-orange-400 to-red-500' : deviceLocationAccuracy > 20 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : 'bg-gradient-to-r from-green-400 to-green-600'} text-white`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium opacity-90">📍 Your Device GPS Accuracy</h3>
+                <p className="text-2xl font-bold mt-1">±{deviceLocationAccuracy.toFixed(1)} meters</p>
+                <p className="text-xs mt-1 opacity-90">
+                  {deviceLocationAccuracy <= 20 && '✓ Excellent accuracy'}
+                  {deviceLocationAccuracy > 20 && deviceLocationAccuracy <= 50 && '⚠️ Good accuracy'}
+                  {deviceLocationAccuracy > 50 && '⚠️ Poor accuracy - Move to open area'}
+                </p>
+              </div>
+              <div className="text-4xl">
+                {deviceLocationAccuracy <= 20 && '✓'}
+                {deviceLocationAccuracy > 20 && deviceLocationAccuracy <= 50 && '⚠️'}
+                {deviceLocationAccuracy > 50 && '❌'}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Distance Display */}
         {getDistanceToTransmitter() && (
@@ -354,15 +459,66 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
           </div>
         )}
 
+        {/* Alert Acknowledgment Button */}
+        {isAlertRinging && (loraStatus === 'EMERGENCY' || loraStatus === 'NORMAL') && !rescueAcknowledged && (
+          <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-lg shadow-2xl p-6 mb-6 text-white animate-pulse border-4 border-yellow-400">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex-1">
+                <p className="font-bold text-2xl mb-2">🚨 ALERT RINGING</p>
+                <p className="text-lg mb-1">{loraStatus === 'EMERGENCY' ? 'Emergency signal detected!' : 'Normal alert received!'}</p>
+                <p className="text-sm opacity-90">Press button below to stop alert and confirm rescue is on the way</p>
+              </div>
+              <button
+                onClick={() => {
+                  const currentDevice = Array.from(deviceMarkers.values()).find(m => m.status === loraStatus);
+                  if (currentDevice) {
+                    acknowledgeRescue(currentDevice.deviceId);
+                  }
+                }}
+                className="bg-white text-red-600 font-bold py-4 px-8 rounded-lg shadow-lg hover:bg-gray-100 transition duration-300 transform hover:scale-105 border-4 border-yellow-400"
+              >
+                <div className="flex flex-col items-center">
+                  <span className="text-3xl mb-2">🛑</span>
+                  <span className="text-lg">STOP ALERT</span>
+                  <span className="text-sm font-normal">Rescue On The Way</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Rescue Acknowledged Banner */}
+        {rescueAcknowledged && (
+          <div className="bg-gradient-to-r from-green-500 to-teal-600 rounded-lg shadow-lg p-6 mb-6 text-white border-2 border-green-300">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex-1">
+                <p className="font-bold text-2xl mb-2">✅ RESCUE ACKNOWLEDGED</p>
+                <p className="text-lg">Help is on the way!</p>
+                <p className="text-sm opacity-90 mt-1">Alert has been stopped and rescue team has been notified</p>
+              </div>
+              <button
+                onClick={() => {
+                  setRescueAcknowledged(false);
+                  setAcknowledgedDeviceId(null);
+                  showToast('Acknowledgment cleared');
+                }}
+                className="bg-white text-green-600 font-semibold py-2 px-4 rounded-lg shadow hover:bg-gray-100 transition duration-300 text-sm"
+              >
+                Clear Status
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Status Banner */}
-        {loraStatus === 'EMERGENCY' && (
+        {loraStatus === 'EMERGENCY' && !rescueAcknowledged && (
           <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded animate-pulse">
             <p className="font-bold text-lg">🚨 EMERGENCY ALERT ACTIVE</p>
             <p>Emergency distress signal received from transmitter</p>
           </div>
         )}
 
-        {loraStatus === 'NORMAL' && (
+        {loraStatus === 'NORMAL' && !rescueAcknowledged && (
           <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6 rounded">
             <p className="font-semibold">✅ Normal Status</p>
             <p>All systems operating normally</p>
@@ -481,6 +637,12 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
                       <p className="text-xs text-gray-500 mt-1">
                         {(deviceLocation as [number, number])[0].toFixed(6)}, {(deviceLocation as [number, number])[1].toFixed(6)}
                       </p>
+                      {deviceLocationAccuracy !== null && (
+                        <p className={`text-xs font-medium mt-1 ${deviceLocationAccuracy > 50 ? 'text-orange-600' : 'text-green-600'}`}>
+                          Accuracy: ±{deviceLocationAccuracy.toFixed(1)}m
+                          {deviceLocationAccuracy > 50 && ' ⚠️'}
+                        </p>
+                      )}
                       {getDistanceToTransmitter() && (
                         <p className="text-xs font-semibold text-blue-600 mt-2 border-t pt-2">
                           Distance to transmitter: {getDistanceToTransmitter()}
