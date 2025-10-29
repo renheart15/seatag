@@ -206,7 +206,6 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
       log.status,
       log.latitude?.toFixed(6) || 'N/A',
       log.longitude?.toFixed(6) || 'N/A',
-      log.speed || 'N/A',
       log.satellites || 'N/A',
       log.rssi || 'N/A',
       log.snr || 'N/A'
@@ -214,7 +213,7 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
 
     // Add table
     autoTable(doc, {
-      head: [['Device', 'Timestamp', 'Status', 'Latitude', 'Longitude', 'Speed', 'Sats', 'RSSI', 'SNR']],
+      head: [['Device', 'Timestamp', 'Status', 'Latitude', 'Longitude', 'Sats', 'RSSI', 'SNR']],
       body: tableData,
       startY: selectedDevice ? 42 : 35,
       styles: { fontSize: 7 },
@@ -234,7 +233,6 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
       Status: log.status,
       Latitude: log.latitude?.toFixed(6) || 'N/A',
       Longitude: log.longitude?.toFixed(6) || 'N/A',
-      Speed: log.speed || 'N/A',
       Satellites: log.satellites || 'N/A',
       RSSI: log.rssi || 'N/A',
       SNR: log.snr || 'N/A',
@@ -583,9 +581,6 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
                       Longitude
                     </th>
                     <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider">
-                      Speed
-                    </th>
-                    <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider">
                       Sats
                     </th>
                     <th className="px-3 sm:px-6 py-2 sm:py-3 text-left text-xs font-medium uppercase tracking-wider">
@@ -626,9 +621,6 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap font-mono text-gray-900">
                         {log.longitude?.toFixed(4)}
-                      </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-gray-900">
-                        {log.speed || 'N/A'}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-gray-900">
                         {log.satellites || 'N/A'}
@@ -742,13 +734,6 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
                             </div>
                           )}
 
-                          {log.speed && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-gray-600">Speed:</span>
-                              <span className="text-sm text-gray-800">{log.speed}</span>
-                            </div>
-                          )}
-
                           {log.satellites && (
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-gray-600">Satellites:</span>
@@ -858,12 +843,6 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
                     <p className="text-xs text-gray-600 mb-1">Longitude</p>
                     <p className="font-mono font-semibold text-sm">{selectedLocation.longitude.toFixed(6)}</p>
                   </div>
-                  {selectedLocation.speed && (
-                    <div className="bg-green-50 p-3 rounded-lg">
-                      <p className="text-xs text-gray-600 mb-1">Speed</p>
-                      <p className="font-semibold text-sm">{selectedLocation.speed}</p>
-                    </div>
-                  )}
                   {selectedLocation.satellites && (
                     <div className="bg-yellow-50 p-3 rounded-lg">
                       <p className="text-xs text-gray-600 mb-1">Satellites</p>
@@ -900,7 +879,6 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
                         <div className="text-center">
                           <p className="font-bold">{selectedLocation.status}</p>
                           <p className="text-sm">{selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}</p>
-                          {selectedLocation.speed && <p className="text-sm">Speed: {selectedLocation.speed}</p>}
                           <p className="text-xs text-gray-500 mt-1">{formatDate(selectedLocation.timestamp)} {formatTime(selectedLocation.timestamp)}</p>
                         </div>
                       </Popup>
