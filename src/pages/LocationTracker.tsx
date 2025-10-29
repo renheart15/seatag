@@ -381,21 +381,21 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-2 sm:p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header with LoRa Status */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <div className="flex justify-between items-start flex-wrap gap-4">
+        <div className="bg-white rounded-lg shadow-lg p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6">
+          <div className="flex justify-between items-start flex-wrap gap-2 sm:gap-3 md:gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-800 mb-2">SEATAG</h1>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 mb-1">SEATAG</h1>
             </div>
             <div className="text-right">
               <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${loraConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-                <span className="text-sm font-semibold">{loraStatus}</span>
+                <div className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full ${loraConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+                <span className="text-xs sm:text-sm font-semibold">{loraStatus}</span>
               </div>
               {lastLoraUpdate && (
-                <p className="text-xs text-gray-500 mt-1">Last update: {lastLoraUpdate}</p>
+                <p className="text-[10px] sm:text-xs text-gray-500 mt-1">Last: {lastLoraUpdate}</p>
               )}
             </div>
           </div>
@@ -403,18 +403,18 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
 
         {/* GPS Accuracy Indicator */}
         {deviceLocation && deviceLocationAccuracy !== null && (
-          <div className={`rounded-lg shadow-lg p-4 mb-6 ${deviceLocationAccuracy > 50 ? 'bg-gradient-to-r from-orange-400 to-red-500' : deviceLocationAccuracy > 20 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : 'bg-gradient-to-r from-green-400 to-green-600'} text-white`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium opacity-90">📍 Your Device GPS Accuracy</h3>
-                <p className="text-2xl font-bold mt-1">±{deviceLocationAccuracy.toFixed(1)} meters</p>
-                <p className="text-xs mt-1 opacity-90">
-                  {deviceLocationAccuracy <= 20 && '✓ Excellent accuracy'}
-                  {deviceLocationAccuracy > 20 && deviceLocationAccuracy <= 50 && '⚠️ Good accuracy'}
-                  {deviceLocationAccuracy > 50 && '⚠️ Poor accuracy - Move to open area'}
+          <div className={`rounded-lg shadow-lg p-3 sm:p-4 mb-3 sm:mb-4 md:mb-6 ${deviceLocationAccuracy > 50 ? 'bg-gradient-to-r from-orange-400 to-red-500' : deviceLocationAccuracy > 20 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' : 'bg-gradient-to-r from-green-400 to-green-600'} text-white`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1">
+                <h3 className="text-xs sm:text-sm font-medium opacity-90">📍 GPS Accuracy</h3>
+                <p className="text-lg sm:text-xl md:text-2xl font-bold mt-0.5 sm:mt-1">±{deviceLocationAccuracy.toFixed(1)}m</p>
+                <p className="text-[10px] sm:text-xs mt-0.5 sm:mt-1 opacity-90">
+                  {deviceLocationAccuracy <= 20 && '✓ Excellent'}
+                  {deviceLocationAccuracy > 20 && deviceLocationAccuracy <= 50 && '⚠️ Good'}
+                  {deviceLocationAccuracy > 50 && '⚠️ Poor - Move outside'}
                 </p>
               </div>
-              <div className="text-4xl">
+              <div className="text-2xl sm:text-3xl md:text-4xl">
                 {deviceLocationAccuracy <= 20 && '✓'}
                 {deviceLocationAccuracy > 20 && deviceLocationAccuracy <= 50 && '⚠️'}
                 {deviceLocationAccuracy > 50 && '❌'}
@@ -425,15 +425,15 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
 
         {/* Distance Display */}
         {getDistanceToTransmitter() && (
-          <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-lg p-6 mb-6 text-white">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <h2 className="text-sm font-medium opacity-90">Distance to Transmitter</h2>
-                <p className="text-4xl font-bold mt-1">{getDistanceToTransmitter()}</p>
+          <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg shadow-lg p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6 text-white">
+            <div className="flex items-center justify-between flex-wrap gap-2 sm:gap-3 md:gap-4">
+              <div className="flex-1">
+                <h2 className="text-xs sm:text-sm font-medium opacity-90">Distance</h2>
+                <p className="text-2xl sm:text-3xl md:text-4xl font-bold mt-0.5 sm:mt-1">{getDistanceToTransmitter()}</p>
               </div>
               <div className="text-right">
                 <svg
-                  className="w-16 h-16 opacity-80"
+                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 opacity-80"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -453,20 +453,20 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
                 </svg>
               </div>
             </div>
-            <div className="mt-3 text-sm opacity-90">
-              <p>📱 Your Device ← → 📡 Transmitter</p>
+            <div className="mt-2 sm:mt-3 text-xs sm:text-sm opacity-90">
+              <p>📱 You ← → 📡 Tracker</p>
             </div>
           </div>
         )}
 
         {/* Alert Acknowledgment Button */}
         {isAlertRinging && (loraStatus === 'EMERGENCY' || loraStatus === 'NORMAL') && !rescueAcknowledged && (
-          <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-lg shadow-2xl p-6 mb-6 text-white animate-pulse border-4 border-yellow-400">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex-1">
-                <p className="font-bold text-2xl mb-2">🚨 ALERT RINGING</p>
-                <p className="text-lg mb-1">{loraStatus === 'EMERGENCY' ? 'Emergency signal detected!' : 'Normal alert received!'}</p>
-                <p className="text-sm opacity-90">Press button below to stop alert and confirm rescue is on the way</p>
+          <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-lg shadow-2xl p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6 text-white animate-pulse border-2 sm:border-4 border-yellow-400">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
+              <div className="flex-1 text-center sm:text-left">
+                <p className="font-bold text-lg sm:text-xl md:text-2xl mb-1 sm:mb-2">🚨 ALERT RINGING</p>
+                <p className="text-sm sm:text-base md:text-lg mb-0.5 sm:mb-1">{loraStatus === 'EMERGENCY' ? 'Emergency!' : 'Alert received!'}</p>
+                <p className="text-xs sm:text-sm opacity-90">Press to stop and confirm rescue</p>
               </div>
               <button
                 onClick={() => {
@@ -475,12 +475,12 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
                     acknowledgeRescue(currentDevice.deviceId);
                   }
                 }}
-                className="bg-white text-red-600 font-bold py-4 px-8 rounded-lg shadow-lg hover:bg-gray-100 transition duration-300 transform hover:scale-105 border-4 border-yellow-400"
+                className="bg-white text-red-600 font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-lg shadow-lg hover:bg-gray-100 transition duration-300 transform hover:scale-105 border-2 sm:border-4 border-yellow-400 w-full sm:w-auto"
               >
                 <div className="flex flex-col items-center">
-                  <span className="text-3xl mb-2">🛑</span>
-                  <span className="text-lg">STOP ALERT</span>
-                  <span className="text-sm font-normal">Rescue On The Way</span>
+                  <span className="text-2xl sm:text-3xl mb-1 sm:mb-2">🛑</span>
+                  <span className="text-base sm:text-lg">STOP ALERT</span>
+                  <span className="text-xs sm:text-sm font-normal">Rescue On Way</span>
                 </div>
               </button>
             </div>
@@ -489,12 +489,12 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
 
         {/* Rescue Acknowledged Banner */}
         {rescueAcknowledged && (
-          <div className="bg-gradient-to-r from-green-500 to-teal-600 rounded-lg shadow-lg p-6 mb-6 text-white border-2 border-green-300">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex-1">
-                <p className="font-bold text-2xl mb-2">✅ RESCUE ACKNOWLEDGED</p>
-                <p className="text-lg">Help is on the way!</p>
-                <p className="text-sm opacity-90 mt-1">Alert has been stopped and rescue team has been notified</p>
+          <div className="bg-gradient-to-r from-green-500 to-teal-600 rounded-lg shadow-lg p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6 text-white border-2 border-green-300">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-3 md:gap-4">
+              <div className="flex-1 text-center sm:text-left">
+                <p className="font-bold text-lg sm:text-xl md:text-2xl mb-1 sm:mb-2">✅ RESCUE ACKNOWLEDGED</p>
+                <p className="text-sm sm:text-base md:text-lg">Help is on the way!</p>
+                <p className="text-xs sm:text-sm opacity-90 mt-0.5 sm:mt-1">Alert stopped, rescue notified</p>
               </div>
               <button
                 onClick={() => {
@@ -502,7 +502,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
                   setAcknowledgedDeviceId(null);
                   showToast('Acknowledgment cleared');
                 }}
-                className="bg-white text-green-600 font-semibold py-2 px-4 rounded-lg shadow hover:bg-gray-100 transition duration-300 text-sm"
+                className="bg-white text-green-600 font-semibold py-2 px-3 sm:px-4 rounded-lg shadow hover:bg-gray-100 transition duration-300 text-xs sm:text-sm w-full sm:w-auto"
               >
                 Clear Status
               </button>
@@ -512,16 +512,16 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
 
         {/* Status Banner */}
         {loraStatus === 'EMERGENCY' && !rescueAcknowledged && (
-          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded animate-pulse">
-            <p className="font-bold text-lg">🚨 EMERGENCY ALERT ACTIVE</p>
-            <p>Emergency distress signal received from transmitter</p>
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-3 sm:p-4 mb-3 sm:mb-4 md:mb-6 rounded animate-pulse">
+            <p className="font-bold text-sm sm:text-base md:text-lg">🚨 EMERGENCY ALERT</p>
+            <p className="text-xs sm:text-sm">Emergency signal received</p>
           </div>
         )}
 
         {loraStatus === 'NORMAL' && !rescueAcknowledged && (
-          <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6 rounded">
-            <p className="font-semibold">✅ Normal Status</p>
-            <p>All systems operating normally</p>
+          <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-3 sm:p-4 mb-3 sm:mb-4 md:mb-6 rounded">
+            <p className="font-semibold text-sm sm:text-base">✅ Normal Status</p>
+            <p className="text-xs sm:text-sm">Systems operating normally</p>
           </div>
         )}
 
@@ -534,19 +534,19 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
 
         {/* Device Selector */}
         {deviceMarkers.size > 1 && (
-          <div className="bg-white rounded-lg shadow-lg p-4 mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Select Device to Track ({deviceMarkers.size} devices active)
+          <div className="bg-white rounded-lg shadow-lg p-3 sm:p-4 mb-3 sm:mb-4 md:mb-6">
+            <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-1 sm:mb-2">
+              Select Device ({deviceMarkers.size} active)
             </label>
             <select
               value={selectedDeviceId || ''}
               onChange={(e) => setSelectedDeviceId(e.target.value || null)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full p-2 sm:p-3 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             >
               <option value="">All Devices</option>
               {Array.from(deviceMarkers.values()).map((marker) => (
                 <option key={marker.deviceId} value={marker.deviceId}>
-                  {marker.deviceName || marker.deviceId} - {marker.status} (Last update: {new Date(marker.timestamp).toLocaleTimeString()})
+                  {marker.deviceName || marker.deviceId} - {marker.status}
                 </option>
               ))}
             </select>
@@ -554,8 +554,8 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
         )}
 
         {/* Map Container */}
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-6">
-          <div className="h-[500px] relative">
+        <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-3 sm:mb-4 md:mb-6">
+          <div className="h-[300px] sm:h-[400px] md:h-[500px] relative">
             <MapContainer
               center={userLocation}
               zoom={13}
@@ -657,57 +657,57 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-4 flex-wrap">
+        <div className="flex gap-2 sm:gap-3 md:gap-4 flex-wrap">
           <button
             onClick={onNavigateToLogs}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-105"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 sm:py-3.5 md:py-4 px-4 sm:px-5 md:px-6 rounded-lg shadow-md transition duration-300 transform hover:scale-105 text-sm sm:text-base"
           >
             View Location History
           </button>
         </div>
 
         {/* Info Card */}
-        <div className="mt-6 bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-3">System Info</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-red-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-red-700 mb-2">🚨 EMERGENCY Mode</h3>
-              <p className="text-sm text-gray-600">Hold RED button for 2.5s</p>
-              <p className="text-xs text-gray-500 mt-1">Updates every 5 seconds</p>
+        <div className="mt-3 sm:mt-4 md:mt-6 bg-white rounded-lg shadow-lg p-3 sm:p-4 md:p-6">
+          <h2 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 mb-2 sm:mb-3">System Info</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 md:gap-4">
+            <div className="bg-red-50 p-2 sm:p-3 md:p-4 rounded-lg">
+              <h3 className="font-semibold text-red-700 mb-1 sm:mb-2 text-xs sm:text-sm">🚨 EMERGENCY</h3>
+              <p className="text-xs sm:text-sm text-gray-600">Hold RED 2.5s</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">Updates every 5s</p>
             </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-green-700 mb-2">✅ NORMAL Mode</h3>
-              <p className="text-sm text-gray-600">Hold GREEN button for 2.5s</p>
-              <p className="text-xs text-gray-500 mt-1">Updates every 60 seconds</p>
+            <div className="bg-green-50 p-2 sm:p-3 md:p-4 rounded-lg">
+              <h3 className="font-semibold text-green-700 mb-1 sm:mb-2 text-xs sm:text-sm">✅ NORMAL</h3>
+              <p className="text-xs sm:text-sm text-gray-600">Hold GREEN 2.5s</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">Updates every 60s</p>
             </div>
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-blue-700 mb-2">📍 STATUS Mode</h3>
-              <p className="text-sm text-gray-600">Hold BOTH buttons for 2.5s</p>
-              <p className="text-xs text-gray-500 mt-1">Updates every 60 seconds</p>
+            <div className="bg-blue-50 p-2 sm:p-3 md:p-4 rounded-lg">
+              <h3 className="font-semibold text-blue-700 mb-1 sm:mb-2 text-xs sm:text-sm">📍 STATUS</h3>
+              <p className="text-xs sm:text-sm text-gray-600">Hold BOTH 2.5s</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">Updates every 60s</p>
             </div>
           </div>
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <h3 className="font-semibold text-gray-700 mb-2">📍 Map Markers</h3>
-            <div className="space-y-2 text-sm text-gray-600">
+          <div className="mt-3 sm:mt-4 p-2 sm:p-3 md:p-4 bg-gray-50 rounded-lg">
+            <h3 className="font-semibold text-gray-700 mb-1 sm:mb-2 text-xs sm:text-sm">📍 Map Markers</h3>
+            <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm text-gray-600">
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-red-500 rounded-full"></div>
-                <span><strong>Red Marker:</strong> Transmitter in EMERGENCY mode</span>
+                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-red-500 rounded-full flex-shrink-0"></div>
+                <span className="text-[10px] sm:text-xs"><strong>Red:</strong> EMERGENCY</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-blue-500 rounded-full"></div>
-                <span><strong>Blue Marker:</strong> Transmitter in NORMAL mode</span>
+                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-blue-500 rounded-full flex-shrink-0"></div>
+                <span className="text-[10px] sm:text-xs"><strong>Blue:</strong> NORMAL</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-yellow-500 rounded-full"></div>
-                <span><strong>Yellow Marker:</strong> Transmitter in STATUS mode</span>
+                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-yellow-500 rounded-full flex-shrink-0"></div>
+                <span className="text-[10px] sm:text-xs"><strong>Yellow:</strong> STATUS</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-green-500 rounded-full"></div>
-                <span><strong>Green Marker:</strong> Your device location (auto-tracked)</span>
+                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex-shrink-0"></div>
+                <span className="text-[10px] sm:text-xs"><strong>Green:</strong> Your device</span>
               </div>
               {deviceMarkers.size > 0 && (
-                <p className="mt-2 text-xs text-indigo-600 font-semibold">
-                  {deviceMarkers.size} transmitter{deviceMarkers.size > 1 ? 's' : ''} currently active
+                <p className="mt-1 sm:mt-2 text-[10px] sm:text-xs text-indigo-600 font-semibold">
+                  {deviceMarkers.size} device{deviceMarkers.size > 1 ? 's' : ''} active
                 </p>
               )}
             </div>
