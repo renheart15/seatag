@@ -146,13 +146,13 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
             // Show notifications
             if (data.status === 'EMERGENCY') {
               showToast(`🚨 EMERGENCY from ${data.deviceName || data.deviceId}!`);
-              // Only play alert if not already acknowledged
+              // Only play alert if rescue not acknowledged
               if (!rescueAcknowledged || acknowledgedDeviceId !== data.deviceId) {
                 playEmergencyAlert(data.deviceId); // Play alarm sound
               }
             } else if (data.status === 'NORMAL') {
               showToast(`✅ ${data.deviceName || data.deviceId} - Normal status`);
-              // Only play alert if not already acknowledged
+              // Only play alert if rescue not acknowledged
               if (!rescueAcknowledged || acknowledgedDeviceId !== data.deviceId) {
                 playEmergencyAlert(data.deviceId); // Play alarm sound for NORMAL mode too
               }
@@ -190,7 +190,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       // Stop any playing alerts on unmount
       stopEmergencyAlert();
     };
-  }, []);
+  }, [rescueAcknowledged, acknowledgedDeviceId]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -199,7 +199,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
 
   // Play emergency alarm sound (continuous until stopped)
   const playEmergencyAlert = (deviceId: string) => {
-    // Don't play if already acknowledged
+    // Don't play if rescue already acknowledged for this device
     if (rescueAcknowledged && acknowledgedDeviceId === deviceId) {
       return;
     }
@@ -272,13 +272,22 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
     }
   };
 
-  // Acknowledge rescue - stops alert and marks as acknowledged
-  const acknowledgeRescue = (deviceId: string) => {
-    stopEmergencyAlert();
-    setRescueAcknowledged(true);
-    setAcknowledgedDeviceId(deviceId);
-    showToast('✅ Rescue acknowledged! Alert stopped.');
-    console.log(`✅ Rescue acknowledged for device: ${deviceId}`);
+  // Toggle rescue acknowledge - stops buzzer and acknowledges rescue
+  const toggleRescueAcknowledge = (deviceId: string) => {
+    if (!rescueAcknowledged) {
+      // Acknowledging rescue and muting buzzer
+      stopEmergencyAlert();
+      setRescueAcknowledged(true);
+      setAcknowledgedDeviceId(deviceId);
+      showToast('✅ Rescue acknowledged! Buzzer muted.');
+      console.log(`✅ Rescue acknowledged for device: ${deviceId}, buzzer muted`);
+    } else {
+      // Clearing acknowledgment and enabling buzzer
+      setRescueAcknowledged(false);
+      setAcknowledgedDeviceId(null);
+      showToast('🔊 Acknowledgment cleared, buzzer enabled');
+      console.log('🔊 Acknowledgment cleared, buzzer enabled');
+    }
   };
 
   // Calculate distance using Haversine formula
@@ -459,52 +468,52 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
           </div>
         )}
 
-        {/* Alert Acknowledgment Button */}
-        {isAlertRinging && (loraStatus === 'EMERGENCY' || loraStatus === 'NORMAL') && !rescueAcknowledged && (
-          <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-lg shadow-2xl p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6 text-white animate-pulse border-2 sm:border-4 border-yellow-400">
+        {/* Response/Rescue Button */}
+        {(isAlertRinging || rescueAcknowledged) && (loraStatus === 'EMERGENCY' || loraStatus === 'NORMAL') && (
+          <div className={`rounded-lg shadow-2xl p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6 text-white border-2 sm:border-4 ${
+            rescueAcknowledged
+              ? 'bg-gradient-to-r from-green-500 to-teal-600 border-green-300'
+              : 'bg-gradient-to-r from-red-600 to-orange-600 animate-pulse border-yellow-400'
+          }`}>
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
               <div className="flex-1 text-center sm:text-left">
-                <p className="font-bold text-lg sm:text-xl md:text-2xl mb-1 sm:mb-2">🚨 ALERT RINGING</p>
-                <p className="text-sm sm:text-base md:text-lg mb-0.5 sm:mb-1">{loraStatus === 'EMERGENCY' ? 'Emergency!' : 'Alert received!'}</p>
-                <p className="text-xs sm:text-sm opacity-90">Press to stop and confirm rescue</p>
+                <p className="font-bold text-lg sm:text-xl md:text-2xl mb-1 sm:mb-2">
+                  {rescueAcknowledged ? '✅ RESCUE ACKNOWLEDGED' : '🚨 ALERT RINGING'}
+                </p>
+                <p className="text-sm sm:text-base md:text-lg mb-0.5 sm:mb-1">
+                  {rescueAcknowledged
+                    ? 'Help is on the way! Buzzer muted.'
+                    : (loraStatus === 'EMERGENCY' ? 'Emergency!' : 'Alert received!')
+                  }
+                </p>
+                <p className="text-xs sm:text-sm opacity-90">
+                  {rescueAcknowledged ? 'Click to clear and enable buzzer' : 'Click to acknowledge and stop buzzer'}
+                </p>
               </div>
               <button
                 onClick={() => {
                   const currentDevice = Array.from(deviceMarkers.values()).find(m => m.status === loraStatus);
                   if (currentDevice) {
-                    acknowledgeRescue(currentDevice.deviceId);
+                    toggleRescueAcknowledge(currentDevice.deviceId);
                   }
                 }}
-                className="bg-white text-red-600 font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-lg shadow-lg hover:bg-gray-100 transition duration-300 transform hover:scale-105 border-2 sm:border-4 border-yellow-400 w-full sm:w-auto"
+                className={`font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-lg shadow-lg hover:bg-gray-100 transition duration-300 transform hover:scale-105 border-2 sm:border-4 w-full sm:w-auto ${
+                  rescueAcknowledged
+                    ? 'bg-white text-green-600 border-green-300'
+                    : 'bg-white text-red-600 border-yellow-400'
+                }`}
               >
                 <div className="flex flex-col items-center">
-                  <span className="text-2xl sm:text-3xl mb-1 sm:mb-2">🛑</span>
-                  <span className="text-base sm:text-lg">STOP ALERT</span>
-                  <span className="text-xs sm:text-sm font-normal">Rescue On Way</span>
+                  <span className="text-2xl sm:text-3xl mb-1 sm:mb-2">
+                    {rescueAcknowledged ? '🔊' : '🛑'}
+                  </span>
+                  <span className="text-base sm:text-lg">
+                    {rescueAcknowledged ? 'CLEAR & ENABLE' : 'RESPONSE/RESCUE'}
+                  </span>
+                  <span className="text-xs sm:text-sm font-normal">
+                    {rescueAcknowledged ? 'Enable buzzer' : 'Acknowledge & Mute'}
+                  </span>
                 </div>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Rescue Acknowledged Banner */}
-        {rescueAcknowledged && (
-          <div className="bg-gradient-to-r from-green-500 to-teal-600 rounded-lg shadow-lg p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6 text-white border-2 border-green-300">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-3 md:gap-4">
-              <div className="flex-1 text-center sm:text-left">
-                <p className="font-bold text-lg sm:text-xl md:text-2xl mb-1 sm:mb-2">✅ RESCUE ACKNOWLEDGED</p>
-                <p className="text-sm sm:text-base md:text-lg">Help is on the way!</p>
-                <p className="text-xs sm:text-sm opacity-90 mt-0.5 sm:mt-1">Alert stopped, rescue notified</p>
-              </div>
-              <button
-                onClick={() => {
-                  setRescueAcknowledged(false);
-                  setAcknowledgedDeviceId(null);
-                  showToast('Acknowledgment cleared');
-                }}
-                className="bg-white text-green-600 font-semibold py-2 px-3 sm:px-4 rounded-lg shadow hover:bg-gray-100 transition duration-300 text-xs sm:text-sm w-full sm:w-auto"
-              >
-                Clear Status
               </button>
             </div>
           </div>
@@ -678,12 +687,12 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
             <div className="bg-green-50 p-2 sm:p-3 md:p-4 rounded-lg">
               <h3 className="font-semibold text-green-700 mb-1 sm:mb-2 text-xs sm:text-sm">✅ NORMAL</h3>
               <p className="text-xs sm:text-sm text-gray-600">Hold GREEN 2.5s</p>
-              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">Updates every 60s</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">Updates every 5s</p>
             </div>
             <div className="bg-blue-50 p-2 sm:p-3 md:p-4 rounded-lg">
               <h3 className="font-semibold text-blue-700 mb-1 sm:mb-2 text-xs sm:text-sm">📍 STATUS</h3>
-              <p className="text-xs sm:text-sm text-gray-600">Hold BOTH 2.5s</p>
-              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">Updates every 60s</p>
+              <p className="text-xs sm:text-sm text-gray-600">Hold BOTH</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 mt-0.5 sm:mt-1">Updates every 5s</p>
             </div>
           </div>
           <div className="mt-3 sm:mt-4 p-2 sm:p-3 md:p-4 bg-gray-50 rounded-lg">
