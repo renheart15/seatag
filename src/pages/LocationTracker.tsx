@@ -532,12 +532,6 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
                 <p className="font-bold text-lg sm:text-xl md:text-2xl mb-1 sm:mb-2">
                   {buzzerEnabled ? '🔊 BUZZER ENABLED' : '🔕 BUZZER DISABLED'}
                 </p>
-                <p className="text-sm sm:text-base md:text-lg mb-0.5 sm:mb-1">
-                  {buzzerEnabled
-                    ? `Alert ringing every 5 seconds (${loraStatus})`
-                    : `Muted - ${loraStatus} alerts silenced`
-                  }
-                </p>
                 <p className="text-xs sm:text-sm opacity-90">
                   {buzzerEnabled ? 'Click to disable buzzer' : 'Click to enable buzzer'}
                 </p>
@@ -551,7 +545,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
                 }`}
               >
                 <div className="flex flex-col items-center">
-                  <span className="text-2xl sm:text-3xl mb-1 sm:mb-2">
+                  <span className="text-xl sm:text-3xl mb-1 sm:mb-2">
                     {buzzerEnabled ? '🔕' : '🔔'}
                   </span>
                   <span className="text-base sm:text-lg">
