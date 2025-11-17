@@ -94,6 +94,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   const watchIdRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const previousStatusRef = useRef<string>(''); // Track previous status to detect changes
 
   // WebSocket connection for LoRa data
   useEffect(() => {
@@ -138,7 +139,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
             });
 
             // Update status (for the most recent update)
-            const statusChanged = data.status !== loraStatus;
+            const statusChanged = data.status !== previousStatusRef.current;
             setLoraStatus(data.status);
             setLastLoraUpdate(new Date(data.timestamp).toLocaleTimeString());
 
@@ -153,6 +154,8 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
               } else if (data.status === 'STATUS') {
                 showToast(`📍 Status update from ${data.deviceName || data.deviceId}`);
               }
+              // Update the ref to the new status
+              previousStatusRef.current = data.status;
             }
           }
         } catch (err) {
@@ -247,8 +250,18 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   const stopEmergencyAlert = () => {
     try {
       if (oscillatorRef.current) {
-        oscillatorRef.current.stop();
-        oscillatorRef.current.disconnect();
+        try {
+          // Try to stop the oscillator immediately
+          oscillatorRef.current.stop(0);
+        } catch (e) {
+          // Oscillator might already be stopped or stopping, ignore error
+          console.log('Oscillator already stopped or stopping');
+        }
+        try {
+          oscillatorRef.current.disconnect();
+        } catch (e) {
+          // Might already be disconnected, ignore error
+        }
         oscillatorRef.current = null;
       }
       if (audioContextRef.current) {
@@ -259,6 +272,8 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       console.log('🔇 Emergency alert stopped');
     } catch (error) {
       console.error('Error stopping alert:', error);
+      // Ensure state is updated even if there's an error
+      setIsAlertRinging(false);
     }
   };
 
