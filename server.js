@@ -73,13 +73,37 @@ async function loadLatestStatus() {
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+// 🆕 Track connected receivers (WebSocket connections)
+const connectedReceivers = new Set();
+
 // --- WebSocket Setup ---
-wss.on('connection', (ws) => {
-  console.log('✅ WebSocket client connected');
+wss.on('connection', (ws, req) => {
+  const path = req.url;
+
+  // Check if this is a receiver connection
+  if (path === '/receiver') {
+    console.log('📡 Receiver WebSocket connected');
+    connectedReceivers.add(ws);
+
+    ws.on('close', () => {
+      console.log('📡 Receiver WebSocket disconnected');
+      connectedReceivers.delete(ws);
+    });
+
+    ws.on('error', (error) => {
+      console.error('Receiver WebSocket error:', error);
+      connectedReceivers.delete(ws);
+    });
+
+    return;
+  }
+
+  // Regular client connection (frontend)
+  console.log('✅ Frontend WebSocket client connected');
   ws.send(JSON.stringify(latestStatus));
 
   ws.on('close', () => {
-    console.log('❌ WebSocket client disconnected');
+    console.log('❌ Frontend WebSocket client disconnected');
   });
 });
 
@@ -214,9 +238,9 @@ app.delete('/api/alerts', async (req, res) => {
   }
 });
 
-// 🆕 Acknowledge/Stop Alert endpoint
+// 🆕 Acknowledge/Stop Alert endpoint (WebSocket-based, works from anywhere!)
 app.post('/api/acknowledge', async (req, res) => {
-  const { deviceId, receiverIp } = req.body;
+  const { deviceId } = req.body;
 
   if (!deviceId) {
     return res.status(400).json({ success: false, message: 'deviceId required' });
@@ -224,33 +248,35 @@ app.post('/api/acknowledge', async (req, res) => {
 
   console.log(`💙 Acknowledgment request for device: ${deviceId}`);
 
-  // If receiverIp provided, forward to receiver
-  if (receiverIp) {
-    try {
-      const response = await fetch(`http://${receiverIp}/acknowledge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId }),
-        signal: AbortSignal.timeout(5000)
-      });
-
-      const data = await response.json();
-      console.log('✅ Forwarded to receiver:', data);
-      return res.json({ success: true, message: 'ACK sent via receiver', data });
-    } catch (err) {
-      console.error('❌ Error forwarding to receiver:', err.message);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to reach receiver',
-        error: err.message
-      });
-    }
+  // Check if any receivers are connected via WebSocket
+  if (connectedReceivers.size === 0) {
+    console.log('⚠️ No receivers connected via WebSocket');
+    return res.status(503).json({
+      success: false,
+      message: 'No receivers online. Make sure ESP8266 receiver is running and connected to internet.'
+    });
   }
 
-  // If no receiverIp, just acknowledge the request
+  // Send acknowledgment command to all connected receivers via WebSocket
+  const ackMessage = JSON.stringify({
+    type: 'acknowledge',
+    deviceId: deviceId
+  });
+
+  let sentCount = 0;
+  connectedReceivers.forEach((receiverWs) => {
+    if (receiverWs.readyState === 1) { // OPEN
+      receiverWs.send(ackMessage);
+      sentCount++;
+    }
+  });
+
+  console.log(`✅ Sent acknowledgment to ${sentCount} receiver(s) via WebSocket`);
+
   res.json({
     success: true,
-    message: 'ACK request received (no receiver IP configured)'
+    message: `ACK sent to ${sentCount} receiver(s) via WebSocket`,
+    receivers: sentCount
   });
 });
 
