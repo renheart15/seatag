@@ -90,10 +90,13 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   const [lastLoraUpdate, setLastLoraUpdate] = useState<string>('');
   const [loraConnected, setLoraConnected] = useState(false);
   const [buzzerEnabled, setBuzzerEnabled] = useState(true); // Toggle for buzzer on/off
+  const [isBuzzerPlaying, setIsBuzzerPlaying] = useState(false); // Track if buzzer is currently playing
   const wsRef = useRef<WebSocket | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const buzzerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const previousStatusRef = useRef<string>(''); // Track previous status for notifications only
 
   // WebSocket connection for LoRa data
@@ -155,11 +158,6 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
               // Update the ref to the new status
               previousStatusRef.current = data.status;
             }
-
-            // Play buzzer on EVERY message if buzzer is enabled and status is EMERGENCY or NORMAL
-            if (buzzerEnabled && (data.status === 'EMERGENCY' || data.status === 'NORMAL')) {
-              playEmergencyAlert();
-            }
           }
         } catch (err) {
           console.error('Error parsing WebSocket data:', err);
@@ -189,7 +187,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
         wsRef.current.close();
       }
       // Stop any playing alerts on unmount
-      stopEmergencyAlert();
+      stopContinuousBuzzer();
     };
   }, []);
 
@@ -198,16 +196,18 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Play emergency alarm sound (continuous until stopped)
-  const playEmergencyAlert = () => {
-    // Stop any existing alert first
-    stopEmergencyAlert();
+  // Start continuous emergency alert (loops until stopped)
+  const startContinuousBuzzer = () => {
+    if (isBuzzerPlaying) {
+      console.log('Buzzer already playing');
+      return;
+    }
 
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       audioContextRef.current = audioContext;
 
-      // Create an oscillator for continuous beeping
+      // Create oscillator and gain node
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
 
@@ -218,56 +218,93 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       oscillator.frequency.value = 2300;
       oscillator.type = 'sine';
 
-      // Set initial volume to 0
-      gainNode.gain.value = 0;
-
-      // Create repeating beep pattern
-      const beepDuration = 0.15; // seconds
-      const pauseDuration = 0.1; // seconds
-      let currentTime = audioContext.currentTime;
-
-      // Loop 40 beeps (about 10 seconds of beeping)
-      for (let i = 0; i < 40; i++) {
-        gainNode.gain.setValueAtTime(0.9, currentTime);
-        gainNode.gain.setValueAtTime(0, currentTime + beepDuration);
-        currentTime += beepDuration + pauseDuration;
-      }
-
       oscillator.start(audioContext.currentTime);
-      oscillator.stop(currentTime);
       oscillatorRef.current = oscillator;
+      gainNodeRef.current = gainNode;
 
-      console.log('🔊 Emergency alert sound started');
+      // Create beep pattern that repeats
+      const createBeepPattern = () => {
+        if (!gainNodeRef.current || !audioContextRef.current) return;
+
+        const beepDuration = 0.15; // seconds
+        const pauseDuration = 0.1; // seconds
+        const ctx = audioContextRef.current;
+        const gain = gainNodeRef.current;
+        let currentTime = ctx.currentTime;
+
+        // Create 3 beeps
+        for (let i = 0; i < 3; i++) {
+          gain.gain.setValueAtTime(0.9, currentTime);
+          gain.gain.setValueAtTime(0, currentTime + beepDuration);
+          currentTime += beepDuration + pauseDuration;
+        }
+      };
+
+      // Start the beep pattern immediately
+      createBeepPattern();
+
+      // Repeat the beep pattern every 1 second
+      const interval = setInterval(() => {
+        if (!gainNodeRef.current || !audioContextRef.current) {
+          clearInterval(interval);
+          return;
+        }
+        createBeepPattern();
+      }, 1000);
+
+      buzzerIntervalRef.current = interval;
+      setIsBuzzerPlaying(true);
+      console.log('🔊 Continuous buzzer started');
     } catch (error) {
-      console.error('Error playing emergency alert:', error);
+      console.error('Error starting continuous buzzer:', error);
     }
   };
 
-  // Stop the emergency alert sound
-  const stopEmergencyAlert = () => {
+  // Stop the continuous buzzer
+  const stopContinuousBuzzer = () => {
     try {
+      // Clear the interval
+      if (buzzerIntervalRef.current) {
+        clearInterval(buzzerIntervalRef.current);
+        buzzerIntervalRef.current = null;
+      }
+
+      // Stop oscillator
       if (oscillatorRef.current) {
         try {
-          // Try to stop the oscillator immediately
-          oscillatorRef.current.stop(0);
+          oscillatorRef.current.stop();
         } catch (e) {
-          // Oscillator might already be stopped or stopping, ignore error
-          console.log('Oscillator already stopped or stopping');
+          console.log('Oscillator already stopped');
         }
         try {
           oscillatorRef.current.disconnect();
         } catch (e) {
-          // Might already be disconnected, ignore error
+          // Already disconnected
         }
         oscillatorRef.current = null;
       }
+
+      // Clear gain node
+      if (gainNodeRef.current) {
+        try {
+          gainNodeRef.current.disconnect();
+        } catch (e) {
+          // Already disconnected
+        }
+        gainNodeRef.current = null;
+      }
+
+      // Close audio context
       if (audioContextRef.current) {
         audioContextRef.current.close();
         audioContextRef.current = null;
       }
-      console.log('🔇 Emergency alert stopped');
+
+      setIsBuzzerPlaying(false);
+      console.log('🔇 Continuous buzzer stopped');
     } catch (error) {
-      console.error('Error stopping alert:', error);
+      console.error('Error stopping buzzer:', error);
+      setIsBuzzerPlaying(false);
     }
   };
 
@@ -275,17 +312,35 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   const toggleBuzzer = () => {
     if (buzzerEnabled) {
       // Disable buzzer and stop current alert
-      stopEmergencyAlert();
+      stopContinuousBuzzer();
       setBuzzerEnabled(false);
       showToast('🔕 Buzzer disabled');
       console.log('🔕 Buzzer disabled');
     } else {
-      // Enable buzzer
+      // Enable buzzer and start if status is EMERGENCY or NORMAL
       setBuzzerEnabled(true);
-      showToast('🔔 Buzzer enabled! Will ring on next update.');
+      if (loraStatus === 'EMERGENCY' || loraStatus === 'NORMAL') {
+        startContinuousBuzzer();
+      }
+      showToast('🔔 Buzzer enabled');
       console.log('🔔 Buzzer enabled');
     }
   };
+
+  // Effect to control buzzer based on status and buzzerEnabled
+  useEffect(() => {
+    if (buzzerEnabled && (loraStatus === 'EMERGENCY' || loraStatus === 'NORMAL')) {
+      // Start buzzer if not already playing
+      if (!isBuzzerPlaying) {
+        startContinuousBuzzer();
+      }
+    } else {
+      // Stop buzzer if playing
+      if (isBuzzerPlaying) {
+        stopContinuousBuzzer();
+      }
+    }
+  }, [loraStatus, buzzerEnabled]);
 
   // Calculate distance using Haversine formula
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
