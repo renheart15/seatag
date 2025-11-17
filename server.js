@@ -121,8 +121,8 @@ app.post('/api/alerts', async (req, res) => {
   const parts = payload.split('|');
 
   // Parse device ID and actual status from payload
-  // Format: DEVICE_ID|STATUS|lat|lng|speed|satellites|uptime,rssi,snr
-  if (parts.length < 7) {
+  // Format: DEVICE_ID|STATUS|lat|lng|satellites|uptime,rssi,snr
+  if (parts.length < 6) {
     console.error('❌ Invalid format - not enough parts:', { payload, parts });
     return res.status(400).json({ success: false, message: 'Invalid format' });
   }
@@ -133,13 +133,13 @@ app.post('/api/alerts', async (req, res) => {
   console.log('📱 Device ID:', deviceId);
   console.log('📝 Status:', actualStatus);
 
-  // Parse uptime,rssi,snr from parts[6]
+  // Parse uptime,rssi,snr from parts[5]
   let uptime = '0';
   let rssi = '';
   let snr = '';
 
-  if (parts[6] && parts[6].includes(',')) {
-    const uptimeParts = parts[6].split(',');
+  if (parts[5] && parts[5].includes(',')) {
+    const uptimeParts = parts[5].split(',');
     uptime = uptimeParts[0] || '0';
     rssi = uptimeParts[1] || '';
     snr = uptimeParts[2] || '';
@@ -151,8 +151,8 @@ app.post('/api/alerts', async (req, res) => {
     status: actualStatus,
     latitude: parseFloat(parts[2]),
     longitude: parseFloat(parts[3]),
-    speed: parts[4] || '0km/h',
-    satellites: parts[5] || '0sat',
+    speed: null,  // Speed no longer transmitted
+    satellites: parts[4] || '0sat',
     uptime,
     rssi,
     snr,
@@ -168,7 +168,7 @@ app.post('/api/alerts', async (req, res) => {
     timestamp: Date.now(),
     latitude: alertData.latitude,
     longitude: alertData.longitude,
-    speed: alertData.speed,
+    speed: null,  // Speed no longer transmitted
     satellites: alertData.satellites,
     uptime: alertData.uptime,
     rssi: alertData.rssi,

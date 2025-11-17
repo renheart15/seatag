@@ -62,25 +62,36 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
           const payloadStr = log.payload || log.rawPayload || '';
           const parts = payloadStr.split('|');
 
-          // New format: DEVICE_ID|STATUS|lat|lng|speed|satellites|uptime,rssi,snr
-          // Old format: STATUS|lat|lng|speed|satellites|uptime,rssi,snr
+          // Current format: DEVICE_ID|STATUS|lat|lng|satellites|uptime,rssi,snr (no speed)
+          // Old format with device: DEVICE_ID|STATUS|lat|lng|speed|satellites|uptime,rssi,snr
+          // Old format without device: STATUS|lat|lng|speed|satellites|uptime,rssi,snr
           let deviceId = log.deviceId || '';
           let startIdx = 1; // Where lat/lng data starts
+          let hasDeviceId = false;
 
-          // Check if first part is a device ID (new format)
-          if (parts.length >= 7 && !parts[0].match(/^(EMERGENCY|NORMAL|STATUS)$/)) {
+          // Check if first part is a device ID (not a status)
+          if (!parts[0].match(/^(EMERGENCY|NORMAL|STATUS)$/)) {
             deviceId = parts[0];
             startIdx = 2; // Skip device ID and status
+            hasDeviceId = true;
           }
 
-          if (parts.length >= startIdx + 5) {
-            // Parse uptime which may contain rssi and snr
-            let uptime = parts[startIdx + 4] || log.uptime || '';
+          // Determine if speed is included based on parts count
+          // With device ID: 6 parts = no speed, 7 parts = has speed
+          // Without device ID: 5 parts = no speed, 6 parts = has speed
+          const expectedPartsNoSpeed = hasDeviceId ? 6 : 5;
+          const expectedPartsWithSpeed = hasDeviceId ? 7 : 6;
+          const hasSpeed = parts.length >= expectedPartsWithSpeed;
+
+          if (parts.length >= expectedPartsNoSpeed) {
+            // Parse uptime,rssi,snr
+            const uptimeIdx = hasSpeed ? startIdx + 4 : startIdx + 3;
+            let uptime = parts[uptimeIdx] || log.uptime || '';
             let rssi = log.rssi || '';
             let snr = log.snr || '';
 
-            if (parts[startIdx + 4] && parts[startIdx + 4].includes(',')) {
-              const uptimeParts = parts[startIdx + 4].split(',');
+            if (parts[uptimeIdx] && parts[uptimeIdx].includes(',')) {
+              const uptimeParts = parts[uptimeIdx].split(',');
               uptime = uptimeParts[0] || '';
               rssi = uptimeParts[1] || '';
               snr = uptimeParts[2] || '';
@@ -92,8 +103,8 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
               deviceName: log.deviceName || deviceId || 'Unknown Device',
               latitude: parseFloat(parts[startIdx]),
               longitude: parseFloat(parts[startIdx + 1]),
-              speed: parts[startIdx + 2] || log.speed,
-              satellites: parts[startIdx + 3] || log.satellites,
+              speed: hasSpeed ? parts[startIdx + 2] : null,
+              satellites: parts[startIdx + (hasSpeed ? 3 : 2)] || log.satellites,
               uptime: uptime,
               rssi: rssi,
               snr: snr,

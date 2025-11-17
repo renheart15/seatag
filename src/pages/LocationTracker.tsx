@@ -126,7 +126,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
               position: newPosition,
               timestamp: data.timestamp || Date.now(),
               status: data.status,
-              speed: data.speed,
+              speed: null,  // Speed no longer transmitted
               satellites: data.satellites,
               rssi: data.rssi,
               snr: data.snr
@@ -617,7 +617,6 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
                         <p className="text-gray-600">
                           {new Date(marker.timestamp).toLocaleString()}
                         </p>
-                        {marker.speed && <p className="text-gray-600">Speed: {marker.speed}</p>}
                         {marker.satellites && <p className="text-gray-600">Satellites: {marker.satellites}</p>}
                         {marker.rssi && <p className="text-gray-600">RSSI: {marker.rssi} dBm</p>}
                         {marker.snr && <p className="text-gray-600">SNR: {marker.snr} dB</p>}
