@@ -73,32 +73,8 @@ async function loadLatestStatus() {
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-// 🆕 Track connected receivers (WebSocket connections)
-const connectedReceivers = new Set();
-
 // --- WebSocket Setup ---
-wss.on('connection', (ws, req) => {
-  const path = req.url;
-
-  // Check if this is a receiver connection
-  if (path === '/receiver') {
-    console.log('📡 Receiver WebSocket connected');
-    connectedReceivers.add(ws);
-
-    ws.on('close', () => {
-      console.log('📡 Receiver WebSocket disconnected');
-      connectedReceivers.delete(ws);
-    });
-
-    ws.on('error', (error) => {
-      console.error('Receiver WebSocket error:', error);
-      connectedReceivers.delete(ws);
-    });
-
-    return;
-  }
-
-  // Regular client connection (frontend)
+wss.on('connection', (ws) => {
   console.log('✅ Frontend WebSocket client connected');
   ws.send(JSON.stringify(latestStatus));
 
@@ -236,48 +212,6 @@ app.delete('/api/alerts', async (req, res) => {
     console.error('Error clearing alerts:', err);
     res.status(500).json({ success: false, message: 'Error clearing alerts' });
   }
-});
-
-// 🆕 Acknowledge/Stop Alert endpoint (WebSocket-based, works from anywhere!)
-app.post('/api/acknowledge', async (req, res) => {
-  const { deviceId } = req.body;
-
-  if (!deviceId) {
-    return res.status(400).json({ success: false, message: 'deviceId required' });
-  }
-
-  console.log(`💙 Acknowledgment request for device: ${deviceId}`);
-
-  // Check if any receivers are connected via WebSocket
-  if (connectedReceivers.size === 0) {
-    console.log('⚠️ No receivers connected via WebSocket');
-    return res.status(503).json({
-      success: false,
-      message: 'No receivers online. Make sure ESP8266 receiver is running and connected to internet.'
-    });
-  }
-
-  // Send acknowledgment command to all connected receivers via WebSocket
-  const ackMessage = JSON.stringify({
-    type: 'acknowledge',
-    deviceId: deviceId
-  });
-
-  let sentCount = 0;
-  connectedReceivers.forEach((receiverWs) => {
-    if (receiverWs.readyState === 1) { // OPEN
-      receiverWs.send(ackMessage);
-      sentCount++;
-    }
-  });
-
-  console.log(`✅ Sent acknowledgment to ${sentCount} receiver(s) via WebSocket`);
-
-  res.json({
-    success: true,
-    message: `ACK sent to ${sentCount} receiver(s) via WebSocket`,
-    receivers: sentCount
-  });
 });
 
 // Health check endpoint

@@ -90,8 +90,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   const [lastLoraUpdate, setLastLoraUpdate] = useState<string>('');
   const [loraConnected, setLoraConnected] = useState(false);
   const [isAlertRinging, setIsAlertRinging] = useState(false);
-  const [rescueAcknowledged, setRescueAcknowledged] = useState(false);
-  const [acknowledgedDeviceId, setAcknowledgedDeviceId] = useState<string | null>(null);
+  const [previousStatus, setPreviousStatus] = useState<string>('');
   const wsRef = useRef<WebSocket | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -140,24 +139,22 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
             });
 
             // Update status (for the most recent update)
+            const statusChanged = data.status !== loraStatus;
             setLoraStatus(data.status);
             setLastLoraUpdate(new Date(data.timestamp).toLocaleTimeString());
 
-            // Show notifications
-            if (data.status === 'EMERGENCY') {
-              showToast(`🚨 EMERGENCY from ${data.deviceName || data.deviceId}!`);
-              // Only play alert if rescue not acknowledged
-              if (!rescueAcknowledged || acknowledgedDeviceId !== data.deviceId) {
+            // Show notifications and play alerts ONLY when status changes
+            if (statusChanged) {
+              if (data.status === 'EMERGENCY') {
+                showToast(`🚨 EMERGENCY from ${data.deviceName || data.deviceId}!`);
                 playEmergencyAlert(data.deviceId); // Play alarm sound
-              }
-            } else if (data.status === 'NORMAL') {
-              showToast(`✅ ${data.deviceName || data.deviceId} - Normal status`);
-              // Only play alert if rescue not acknowledged
-              if (!rescueAcknowledged || acknowledgedDeviceId !== data.deviceId) {
+              } else if (data.status === 'NORMAL') {
+                showToast(`✅ ${data.deviceName || data.deviceId} - Normal status`);
                 playEmergencyAlert(data.deviceId); // Play alarm sound for NORMAL mode too
+              } else if (data.status === 'STATUS') {
+                showToast(`📍 Status update from ${data.deviceName || data.deviceId}`);
               }
-            } else if (data.status === 'STATUS') {
-              showToast(`📍 Status update from ${data.deviceName || data.deviceId}`);
+              setPreviousStatus(data.status);
             }
           }
         } catch (err) {
@@ -190,7 +187,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       // Stop any playing alerts on unmount
       stopEmergencyAlert();
     };
-  }, [rescueAcknowledged, acknowledgedDeviceId]);
+  }, []);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -199,11 +196,6 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
 
   // Play emergency alarm sound (continuous until stopped)
   const playEmergencyAlert = (deviceId: string) => {
-    // Don't play if rescue already acknowledged for this device
-    if (rescueAcknowledged && acknowledgedDeviceId === deviceId) {
-      return;
-    }
-
     // Stop any existing alert first
     stopEmergencyAlert();
 
@@ -269,45 +261,6 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       console.log('🔇 Emergency alert stopped');
     } catch (error) {
       console.error('Error stopping alert:', error);
-    }
-  };
-
-  // Toggle rescue acknowledge - stops buzzer and acknowledges rescue
-  const toggleRescueAcknowledge = async (deviceId: string) => {
-    if (!rescueAcknowledged) {
-      // Acknowledging rescue and muting buzzer
-      stopEmergencyAlert();
-      setRescueAcknowledged(true);
-      setAcknowledgedDeviceId(deviceId);
-      showToast('✅ Rescue acknowledged! Buzzer muted.');
-      console.log(`✅ Rescue acknowledged for device: ${deviceId}, buzzer muted`);
-
-      // 🆕 Send acknowledgment to transmitter via backend (works from anywhere via WebSocket!)
-      try {
-        const response = await fetch('https://seatag.onrender.com/api/acknowledge', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deviceId })
-        });
-
-        const data = await response.json();
-        if (data.success) {
-          console.log('💙 Acknowledgment sent to transmitter:', data);
-          showToast(`💙 Blue LED signal sent to ${data.receivers} receiver(s)!`);
-        } else {
-          console.error('❌ Failed to send acknowledgment:', data);
-          showToast(`⚠️ ${data.message}`);
-        }
-      } catch (error) {
-        console.error('❌ Error sending acknowledgment:', error);
-        showToast('❌ Failed to send blue LED signal');
-      }
-    } else {
-      // Clearing acknowledgment and enabling buzzer
-      setRescueAcknowledged(false);
-      setAcknowledgedDeviceId(null);
-      showToast('🔊 Acknowledgment cleared, buzzer enabled');
-      console.log('🔊 Acknowledgment cleared, buzzer enabled');
     }
   };
 
@@ -489,50 +442,31 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
           </div>
         )}
 
-        {/* Response/Rescue Button */}
-        {(isAlertRinging || rescueAcknowledged) && (loraStatus === 'EMERGENCY' || loraStatus === 'NORMAL') && (
-          <div className={`rounded-lg shadow-2xl p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6 text-white border-2 sm:border-4 ${
-            rescueAcknowledged
-              ? 'bg-gradient-to-r from-green-500 to-teal-600 border-green-300'
-              : 'bg-gradient-to-r from-red-600 to-orange-600 animate-pulse border-yellow-400'
-          }`}>
+        {/* Stop Buzzer Button */}
+        {isAlertRinging && (
+          <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-lg shadow-2xl p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6 text-white border-2 sm:border-4 border-yellow-400 animate-pulse">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
               <div className="flex-1 text-center sm:text-left">
                 <p className="font-bold text-lg sm:text-xl md:text-2xl mb-1 sm:mb-2">
-                  {rescueAcknowledged ? '✅ RESCUE ACKNOWLEDGED' : '🚨 ALERT RINGING'}
+                  🚨 ALERT RINGING
                 </p>
                 <p className="text-sm sm:text-base md:text-lg mb-0.5 sm:mb-1">
-                  {rescueAcknowledged
-                    ? 'Help is on the way! Buzzer muted.'
-                    : (loraStatus === 'EMERGENCY' ? 'Emergency!' : 'Alert received!')
-                  }
+                  Buzzer is active
                 </p>
                 <p className="text-xs sm:text-sm opacity-90">
-                  {rescueAcknowledged ? 'Click to clear and enable buzzer' : 'Click to acknowledge and stop buzzer'}
+                  Click to stop the buzzer
                 </p>
               </div>
               <button
-                onClick={() => {
-                  const currentDevice = Array.from(deviceMarkers.values()).find(m => m.status === loraStatus);
-                  if (currentDevice) {
-                    toggleRescueAcknowledge(currentDevice.deviceId);
-                  }
-                }}
-                className={`font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-lg shadow-lg hover:bg-gray-100 transition duration-300 transform hover:scale-105 border-2 sm:border-4 w-full sm:w-auto ${
-                  rescueAcknowledged
-                    ? 'bg-white text-green-600 border-green-300'
-                    : 'bg-white text-red-600 border-yellow-400'
-                }`}
+                onClick={stopEmergencyAlert}
+                className="font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-lg shadow-lg bg-white text-red-600 hover:bg-gray-100 transition duration-300 transform hover:scale-105 border-2 sm:border-4 border-yellow-400 w-full sm:w-auto"
               >
                 <div className="flex flex-col items-center">
                   <span className="text-2xl sm:text-3xl mb-1 sm:mb-2">
-                    {rescueAcknowledged ? '🔊' : '🛑'}
+                    🛑
                   </span>
                   <span className="text-base sm:text-lg">
-                    {rescueAcknowledged ? 'CLEAR & ENABLE' : 'RESPONSE/RESCUE'}
-                  </span>
-                  <span className="text-xs sm:text-sm font-normal">
-                    {rescueAcknowledged ? 'Enable buzzer' : 'Acknowledge & Mute'}
+                    STOP BUZZER
                   </span>
                 </div>
               </button>
@@ -541,14 +475,14 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
         )}
 
         {/* Status Banner */}
-        {loraStatus === 'EMERGENCY' && !rescueAcknowledged && (
+        {loraStatus === 'EMERGENCY' && (
           <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-3 sm:p-4 mb-3 sm:mb-4 md:mb-6 rounded animate-pulse">
             <p className="font-bold text-sm sm:text-base md:text-lg">🚨 EMERGENCY ALERT</p>
             <p className="text-xs sm:text-sm">Emergency signal received</p>
           </div>
         )}
 
-        {loraStatus === 'NORMAL' && !rescueAcknowledged && (
+        {loraStatus === 'NORMAL' && (
           <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-3 sm:p-4 mb-3 sm:mb-4 md:mb-6 rounded">
             <p className="font-semibold text-sm sm:text-base">✅ Normal Status</p>
             <p className="text-xs sm:text-sm">Systems operating normally</p>
