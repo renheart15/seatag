@@ -89,12 +89,12 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   const [loraStatus, setLoraStatus] = useState<string>('Connecting...');
   const [lastLoraUpdate, setLastLoraUpdate] = useState<string>('');
   const [loraConnected, setLoraConnected] = useState(false);
-  const [isAlertRinging, setIsAlertRinging] = useState(false);
+  const [buzzerEnabled, setBuzzerEnabled] = useState(true); // Toggle for buzzer on/off
   const wsRef = useRef<WebSocket | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const oscillatorRef = useRef<OscillatorNode | null>(null);
-  const previousStatusRef = useRef<string>(''); // Track previous status to detect changes
+  const previousStatusRef = useRef<string>(''); // Track previous status for notifications only
 
   // WebSocket connection for LoRa data
   useEffect(() => {
@@ -143,19 +143,22 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
             setLoraStatus(data.status);
             setLastLoraUpdate(new Date(data.timestamp).toLocaleTimeString());
 
-            // Show notifications and play alerts ONLY when status changes
+            // Show notifications only when status changes
             if (statusChanged) {
               if (data.status === 'EMERGENCY') {
                 showToast(`🚨 EMERGENCY from ${data.deviceName || data.deviceId}!`);
-                playEmergencyAlert(); // Play alarm sound
               } else if (data.status === 'NORMAL') {
                 showToast(`✅ ${data.deviceName || data.deviceId} - Normal status`);
-                playEmergencyAlert(); // Play alarm sound for NORMAL mode too
               } else if (data.status === 'STATUS') {
                 showToast(`📍 Status update from ${data.deviceName || data.deviceId}`);
               }
               // Update the ref to the new status
               previousStatusRef.current = data.status;
+            }
+
+            // Play buzzer on EVERY message if buzzer is enabled and status is EMERGENCY or NORMAL
+            if (buzzerEnabled && (data.status === 'EMERGENCY' || data.status === 'NORMAL')) {
+              playEmergencyAlert();
             }
           }
         } catch (err) {
@@ -234,13 +237,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       oscillator.stop(currentTime);
       oscillatorRef.current = oscillator;
 
-      setIsAlertRinging(true);
       console.log('🔊 Emergency alert sound started');
-
-      // Auto-stop after completion
-      setTimeout(() => {
-        setIsAlertRinging(false);
-      }, currentTime * 1000);
     } catch (error) {
       console.error('Error playing emergency alert:', error);
     }
@@ -268,12 +265,25 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
         audioContextRef.current.close();
         audioContextRef.current = null;
       }
-      setIsAlertRinging(false);
       console.log('🔇 Emergency alert stopped');
     } catch (error) {
       console.error('Error stopping alert:', error);
-      // Ensure state is updated even if there's an error
-      setIsAlertRinging(false);
+    }
+  };
+
+  // Toggle buzzer on/off
+  const toggleBuzzer = () => {
+    if (buzzerEnabled) {
+      // Disable buzzer and stop current alert
+      stopEmergencyAlert();
+      setBuzzerEnabled(false);
+      showToast('🔕 Buzzer disabled');
+      console.log('🔕 Buzzer disabled');
+    } else {
+      // Enable buzzer
+      setBuzzerEnabled(true);
+      showToast('🔔 Buzzer enabled! Will ring on next update.');
+      console.log('🔔 Buzzer enabled');
     }
   };
 
@@ -455,31 +465,42 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
           </div>
         )}
 
-        {/* Stop Buzzer Button */}
-        {isAlertRinging && (
-          <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-lg shadow-2xl p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6 text-white border-2 sm:border-4 border-yellow-400 animate-pulse">
+        {/* Buzzer Toggle Button - Always visible during EMERGENCY/NORMAL */}
+        {(loraStatus === 'EMERGENCY' || loraStatus === 'NORMAL') && (
+          <div className={`rounded-lg shadow-2xl p-3 sm:p-4 md:p-6 mb-3 sm:mb-4 md:mb-6 text-white border-2 sm:border-4 ${
+            buzzerEnabled
+              ? 'bg-gradient-to-r from-red-600 to-orange-600 border-yellow-400 animate-pulse'
+              : 'bg-gradient-to-r from-gray-500 to-gray-600 border-gray-300'
+          }`}>
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
               <div className="flex-1 text-center sm:text-left">
                 <p className="font-bold text-lg sm:text-xl md:text-2xl mb-1 sm:mb-2">
-                  🚨 ALERT RINGING
+                  {buzzerEnabled ? '🔊 BUZZER ENABLED' : '🔕 BUZZER DISABLED'}
                 </p>
                 <p className="text-sm sm:text-base md:text-lg mb-0.5 sm:mb-1">
-                  Buzzer is active
+                  {buzzerEnabled
+                    ? `Alert ringing every 5 seconds (${loraStatus})`
+                    : `Muted - ${loraStatus} alerts silenced`
+                  }
                 </p>
                 <p className="text-xs sm:text-sm opacity-90">
-                  Click to stop the buzzer
+                  {buzzerEnabled ? 'Click to disable buzzer' : 'Click to enable buzzer'}
                 </p>
               </div>
               <button
-                onClick={stopEmergencyAlert}
-                className="font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-lg shadow-lg bg-white text-red-600 hover:bg-gray-100 transition duration-300 transform hover:scale-105 border-2 sm:border-4 border-yellow-400 w-full sm:w-auto"
+                onClick={toggleBuzzer}
+                className={`font-bold py-3 px-6 sm:py-4 sm:px-8 rounded-lg shadow-lg hover:bg-gray-100 transition duration-300 transform hover:scale-105 border-2 sm:border-4 w-full sm:w-auto ${
+                  buzzerEnabled
+                    ? 'bg-white text-red-600 border-yellow-400'
+                    : 'bg-white text-gray-600 border-gray-300'
+                }`}
               >
                 <div className="flex flex-col items-center">
                   <span className="text-2xl sm:text-3xl mb-1 sm:mb-2">
-                    🛑
+                    {buzzerEnabled ? '🔕' : '🔔'}
                   </span>
                   <span className="text-base sm:text-lg">
-                    STOP BUZZER
+                    {buzzerEnabled ? 'DISABLE BUZZER' : 'ENABLE BUZZER'}
                   </span>
                 </div>
               </button>
