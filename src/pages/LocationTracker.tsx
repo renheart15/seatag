@@ -90,7 +90,6 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   const [lastLoraUpdate, setLastLoraUpdate] = useState<string>('');
   const [loraConnected, setLoraConnected] = useState(false);
   const [isAlertRinging, setIsAlertRinging] = useState(false);
-  const [previousStatus, setPreviousStatus] = useState<string>('');
   const wsRef = useRef<WebSocket | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -125,7 +124,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
               position: newPosition,
               timestamp: data.timestamp || Date.now(),
               status: data.status,
-              speed: null,  // Speed no longer transmitted
+              speed: undefined,  // Speed no longer transmitted
               satellites: data.satellites,
               rssi: data.rssi,
               snr: data.snr
@@ -147,14 +146,13 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
             if (statusChanged) {
               if (data.status === 'EMERGENCY') {
                 showToast(`🚨 EMERGENCY from ${data.deviceName || data.deviceId}!`);
-                playEmergencyAlert(data.deviceId); // Play alarm sound
+                playEmergencyAlert(); // Play alarm sound
               } else if (data.status === 'NORMAL') {
                 showToast(`✅ ${data.deviceName || data.deviceId} - Normal status`);
-                playEmergencyAlert(data.deviceId); // Play alarm sound for NORMAL mode too
+                playEmergencyAlert(); // Play alarm sound for NORMAL mode too
               } else if (data.status === 'STATUS') {
                 showToast(`📍 Status update from ${data.deviceName || data.deviceId}`);
               }
-              setPreviousStatus(data.status);
             }
           }
         } catch (err) {
@@ -195,7 +193,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   };
 
   // Play emergency alarm sound (continuous until stopped)
-  const playEmergencyAlert = (deviceId: string) => {
+  const playEmergencyAlert = () => {
     // Stop any existing alert first
     stopEmergencyAlert();
 

@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ACK\" via LoRa when requested\n\nBackend (server.js):\n- Added POST /api/acknowledge endpoint\n- Forwards requests to receiver if receiverIp provided\n- Uses fetch API with 5s timeout\n\nFrontend (LocationTracker.tsx):\n- Modified toggleRescueAcknowledge to send API request\n- Reads receiverIp from localStorage (optional)\n- Shows toast when blue LED signal sent\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []
