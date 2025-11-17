@@ -214,6 +214,46 @@ app.delete('/api/alerts', async (req, res) => {
   }
 });
 
+// 🆕 Acknowledge/Stop Alert endpoint
+app.post('/api/acknowledge', async (req, res) => {
+  const { deviceId, receiverIp } = req.body;
+
+  if (!deviceId) {
+    return res.status(400).json({ success: false, message: 'deviceId required' });
+  }
+
+  console.log(`💙 Acknowledgment request for device: ${deviceId}`);
+
+  // If receiverIp provided, forward to receiver
+  if (receiverIp) {
+    try {
+      const response = await fetch(`http://${receiverIp}/acknowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId }),
+        signal: AbortSignal.timeout(5000)
+      });
+
+      const data = await response.json();
+      console.log('✅ Forwarded to receiver:', data);
+      return res.json({ success: true, message: 'ACK sent via receiver', data });
+    } catch (err) {
+      console.error('❌ Error forwarding to receiver:', err.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to reach receiver',
+        error: err.message
+      });
+    }
+  }
+
+  // If no receiverIp, just acknowledge the request
+  res.json({
+    success: true,
+    message: 'ACK request received (no receiver IP configured)'
+  });
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

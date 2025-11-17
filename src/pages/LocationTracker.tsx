@@ -273,7 +273,7 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
   };
 
   // Toggle rescue acknowledge - stops buzzer and acknowledges rescue
-  const toggleRescueAcknowledge = (deviceId: string) => {
+  const toggleRescueAcknowledge = async (deviceId: string) => {
     if (!rescueAcknowledged) {
       // Acknowledging rescue and muting buzzer
       stopEmergencyAlert();
@@ -281,6 +281,32 @@ export default function LocationTracker({ onNavigateToLogs }: LocationTrackerPro
       setAcknowledgedDeviceId(deviceId);
       showToast('✅ Rescue acknowledged! Buzzer muted.');
       console.log(`✅ Rescue acknowledged for device: ${deviceId}, buzzer muted`);
+
+      // 🆕 Send acknowledgment to transmitter via backend
+      try {
+        // Get receiver IP from localStorage (user can configure this)
+        const receiverIp = localStorage.getItem('receiverIp') || null;
+
+        const response = await fetch('https://seatag.onrender.com/api/acknowledge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deviceId,
+            receiverIp // Can be null, or configured by user
+          })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          console.log('💙 Acknowledgment sent to transmitter:', data);
+          showToast('💙 Blue LED signal sent to transmitter!');
+        } else {
+          console.error('❌ Failed to send acknowledgment:', data);
+        }
+      } catch (error) {
+        console.error('❌ Error sending acknowledgment:', error);
+        // Don't show error toast to user - local acknowledgment still works
+      }
     } else {
       // Clearing acknowledgment and enabling buzzer
       setRescueAcknowledged(false);
