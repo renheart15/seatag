@@ -628,10 +628,10 @@ export default function DataLogs({ onNavigateToMap }: DataLogsProps) {
                         </span>
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap font-mono text-gray-900">
-                        {log.latitude?.toFixed(4)}
+                        {log.latitude?.toFixed(6)}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap font-mono text-gray-900">
-                        {log.longitude?.toFixed(4)}
+                        {log.longitude?.toFixed(6)}
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-gray-900">
                         {log.satellites || 'N/A'}
